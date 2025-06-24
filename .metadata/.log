@@ -16,3 +16,30 @@ Command-line arguments:  -os win32 -ws win32 -arch x86_64
 
 !ENTRY org.eclipse.cdt.core 1 0 2025-06-24 10:09:06.534
 !MESSAGE Indexed 'accelerometer' (30 sources, 89 headers) in 9.44 sec: 9,338 declarations; 68,770 references; 0 unresolved inclusions; 1 syntax errors; 2 unresolved names (0.0026%)
+
+!ENTRY com.st.stm32cube.ide.mcu.debug.launch 2 0 2025-06-24 10:15:24.280
+!MESSAGE Won't launch debug session since we failed to locate the binary.
+
+!ENTRY com.st.stm32cube.ide.mcu.debug.launch 2 0 2025-06-24 10:16:03.786
+!MESSAGE Won't launch debug session since we failed to locate the binary.
+
+!ENTRY com.st.stm32cube.ide.mcu.debug.launch 2 0 2025-06-24 10:16:25.587
+!MESSAGE Won't launch debug session since we failed to locate the binary.
+
+!ENTRY com.st.stm32cube.ide.mcu.debug.launch 2 0 2025-06-24 10:16:35.401
+!MESSAGE Won't launch debug session since we failed to locate the binary.
+
+!ENTRY com.st.stm32cube.ide.mcu.debug.launch 2 0 2025-06-24 10:17:38.854
+!MESSAGE Won't launch debug session since we failed to locate the binary.
+
+!ENTRY com.st.stm32cube.ide.mcu.debug.launch 2 0 2025-06-24 10:17:43.001
+!MESSAGE Won't launch debug session since we failed to locate the binary.
+
+!ENTRY com.st.stm32cube.ide.mcu.debug.launch 2 0 2025-06-24 10:18:13.673
+!MESSAGE Won't launch debug session since we failed to locate the binary.
+
+!ENTRY com.st.stm32cube.ide.mcu.debug.launch 2 0 2025-06-24 10:18:31.160
+!MESSAGE Won't launch debug session since we failed to locate the binary.
+
+!ENTRY com.st.stm32cube.ide.mcu.debug.launch 2 0 2025-06-24 10:19:07.069
+!MESSAGE Won't launch debug session since we failed to locate the binary.
