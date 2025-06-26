@@ -23,6 +23,8 @@
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
 #include <string.h>
+#include <stdio.h>
+
 
 
 /* USER CODE END Includes */
@@ -56,11 +58,39 @@ static void SystemPower_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_ICACHE_Init(void);
 /* USER CODE BEGIN PFP */
+#define DEMCR *((volatile uint32_t*) 0xE000EDFCu)
+#define ITM_TCR     (*(volatile uint32_t*)0xE0000E80)
+#define ITM_TER     (*(volatile uint32_t*)0xE0000E00)
+
+void Enable_ITM_Trace(void) {
+    DEMCR |= (1 << 24);    // TRCENA: enable trace and debug
+    ITM_TCR |= 1;          // ITM enable
+    ITM_TER |= 1;          // Stimulus port 0 enable
+}
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+
+int _write(int file, char *ptr, int len)
+{
+  for (int i = 0; i < len; i++)
+  {
+    ITM_SendChar((uint32_t)*ptr++);
+  }
+  return len;
+}
+
+
+/* Debug Exception and Monitor Control Register base address */
+/* ITM register addresses */
+#define ITM_STIMULUS_PORT0 *((volatile uint32_t*) 0xE0000000u)
+#define ITM_TRACE_EN *((volatile uint32_t*) 0xE0000E00u)
+/* Send a char through ITM */
+
+
 
 /* USER CODE END 0 */
 
@@ -68,6 +98,8 @@ static void MX_ICACHE_Init(void);
   * @brief  The application entry point.
   * @retval int
   */
+
+int counter = 0;
 int main(void)
 {
 
@@ -98,6 +130,8 @@ int main(void)
   MX_GPIO_Init();
   MX_ICACHE_Init();
   /* USER CODE BEGIN 2 */
+  Enable_ITM_Trace();
+
 
   /* USER CODE END 2 */
 
@@ -122,17 +156,23 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
   while (1)
   {
 
     /* USER CODE END WHILE */
-	  BSP_LED_Toggle(LED_GREEN);
-	  HAL_Delay(500);
 
     /* USER CODE BEGIN 3 */
-  }
+	    BSP_LED_Toggle(LED_GREEN);
+	    HAL_Delay(500);
+	    int counter = 0;
+	    while (1) {
+	        printf("Zähler = %d\n", counter++);
+	        HAL_Delay(1000);
+	    }
+  }}
   /* USER CODE END 3 */
-}
+
 
 /**
   * @brief System Clock Configuration
@@ -185,7 +225,6 @@ void SystemClock_Config(void)
   */
 static void SystemPower_Config(void)
 {
-  HAL_PWREx_EnableVddIO2();
 
   /*
    * Disable the internal Pull-Up in Dead Battery pins of UCPD peripheral
@@ -249,39 +288,17 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
-  __HAL_RCC_GPIOG_CLK_ENABLE();
+  __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOG, GPIO_PIN_2, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : PG2 */
-  GPIO_InitStruct.Pin = GPIO_PIN_2;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  /*Configure GPIO pins : PF0 PF1 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PC7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PB7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  GPIO_InitStruct.Alternate = GPIO_AF4_I2C2;
+  HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
