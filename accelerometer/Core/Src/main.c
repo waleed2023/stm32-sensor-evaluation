@@ -24,6 +24,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
+#include "mis2dh.h"
 
 
 
@@ -48,7 +49,12 @@
 
 COM_InitTypeDef BspCOMInit;
 
+I2C_HandleTypeDef hi2c2;
+
+UART_HandleTypeDef huart2;
+
 /* USER CODE BEGIN PV */
+extern I2C_HandleTypeDef hi2c2;
 
 /* USER CODE END PV */
 
@@ -57,6 +63,8 @@ void SystemClock_Config(void);
 static void SystemPower_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_ICACHE_Init(void);
+static void MX_I2C2_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 #define DEMCR *((volatile uint32_t*) 0xE000EDFCu)
 #define ITM_TCR     (*(volatile uint32_t*)0xE0000E80)
@@ -98,8 +106,6 @@ int _write(int file, char *ptr, int len)
   * @brief  The application entry point.
   * @retval int
   */
-
-int counter = 0;
 int main(void)
 {
 
@@ -129,9 +135,54 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_ICACHE_Init();
+  MX_I2C2_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  Enable_ITM_Trace();
 
+
+  Enable_ITM_Trace();
+//
+//  // I2C Scan: prüft, welche Geräte auf dem Bus antworten
+//  for (uint8_t addr = 1; addr < 127; addr++) {
+//      if (HAL_I2C_IsDeviceReady(&hi2c2, addr << 1, 3, 100) == HAL_OK) {
+//          printf("I2C-Gerät gefunden bei Adresse 0x%02X\n", addr);
+//      }
+//  }
+
+
+  uint8_t sensor_id = 0;
+  int16_t accel_x = 0, accel_y = 0, accel_z = 0;
+  HAL_StatusTypeDef status;
+  // --- Test 1: Sensor-ID lesen ---
+  // Übergebe den I2C2-Handle an die Funktion
+  status = MIS2DH_ReadID(&hi2c2, &sensor_id);
+  if (status == HAL_OK) {
+      if (sensor_id == MIS2DH_WHO_AM_I_VALUE) {
+          // Kommunikation erfolgreich, Sensor gefunden!
+          // Hier könntest du z.B. eine LED blinken lassen (wenn auf deinem Board vorhanden)
+          // Beispiel für Nucleo-Boards (LD2 auf PA5):
+          // HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+          // HAL_Delay(500);
+          // HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+          // Oder eine Debug-Nachricht (siehe unten für printf)
+           printf("Sensor ID OK: 0x%X\r\n", sensor_id);
+      } else {
+          // Sensor-ID falsch, Kommunikation schlägt fehl oder falscher Sensor
+           printf("Falsche Sensor ID: 0x%X (Erwartet 0x%X)\r\n", sensor_id, MIS2DH_WHO_AM_I_VALUE);
+      }
+  } else {
+      // Fehler beim Lesen der Sensor-ID
+      printf("Fehler beim Lesen der Sensor ID, HAL_Status: %d\r\n", status);
+  }
+
+  // --- Sensor initialisieren (z.B. Data Rate, Achsen aktivieren) ---
+  // Übergebe den I2C2-Handle
+  status = MIS2DH_Init(&hi2c2);
+  if (status == HAL_OK) {
+       printf("Sensor initialisiert.\r\n");
+  } else {
+       printf("Fehler bei der Sensor-Initialisierung, HAL_Status: %d\r\n", status);
+  }
 
   /* USER CODE END 2 */
 
@@ -163,16 +214,28 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	    BSP_LED_Toggle(LED_GREEN);
-	    HAL_Delay(500);
-	    int counter = 0;
-	    while (1) {
-	        printf("Zähler = %d\n", counter++);
-	        HAL_Delay(1000);
-	    }
-  }}
-  /* USER CODE END 3 */
+	    // --- Test 2: Beschleunigungsdaten lesen ---
+	    // Übergebe den I2C2-Handle
+	    status = MIS2DH_ReadXYZ(&hi2c2, &accel_x, &accel_y, &accel_z);
+	    if (status == HAL_OK) {
+	        // Daten erfolgreich gelesen
+	        // Diese Werte (accel_x, accel_y, accel_z) kannst du nun im Debugger
+	        // im "Variables" Fenster beobachten.
+	        // Wenn du den Sensor bewegst, sollten sich diese Werte ändern.
+	        // Wenn du printf eingerichtet hast (siehe unten), kannst du die Werte auch im Terminal sehen:
+	         printf("X: %d, Y: %d, Z: %d\r\n", accel_x, accel_y, accel_z);
 
+	    } else {
+	        // Fehler beim Lesen der Beschleunigungsdaten
+	        printf("Fehler beim Lesen der XYZ-Daten, HAL_Status: %d\r\n", status);
+	        BSP_LED_On(LED_RED);
+	    }
+
+	    HAL_Delay(100); // Warte 100 ms vor der nächsten Messung
+	  }
+
+  /* USER CODE END 3 */
+}
 
 /**
   * @brief System Clock Configuration
@@ -192,10 +255,9 @@ void SystemClock_Config(void)
 
   /** Initializes the CPU, AHB and APB buses clocks
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
-  RCC_OscInitStruct.MSIState = RCC_MSI_ON;
-  RCC_OscInitStruct.MSICalibrationValue = RCC_MSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_4;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -207,8 +269,8 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
                               |RCC_CLOCKTYPE_PCLK3;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_MSI;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV4;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB3CLKDivider = RCC_HCLK_DIV1;
@@ -240,6 +302,54 @@ static void SystemPower_Config(void)
   }
 /* USER CODE BEGIN PWR */
 /* USER CODE END PWR */
+}
+
+/**
+  * @brief I2C2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C2_Init(void)
+{
+
+  /* USER CODE BEGIN I2C2_Init 0 */
+
+  /* USER CODE END I2C2_Init 0 */
+
+  /* USER CODE BEGIN I2C2_Init 1 */
+
+  /* USER CODE END I2C2_Init 1 */
+  hi2c2.Instance = I2C2;
+  hi2c2.Init.Timing = 0x00303D5B;
+  hi2c2.Init.OwnAddress1 = 0;
+  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c2.Init.OwnAddress2 = 0;
+  hi2c2.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c2, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c2, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C2_Init 2 */
+
+  /* USER CODE END I2C2_Init 2 */
+
 }
 
 /**
@@ -275,13 +385,60 @@ static void MX_ICACHE_Init(void)
 }
 
 /**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart2.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetTxFifoThreshold(&huart2, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetRxFifoThreshold(&huart2, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_DisableFifoMode(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
   */
 static void MX_GPIO_Init(void)
 {
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
@@ -291,14 +448,6 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
-
-  /*Configure GPIO pins : PF0 PF1 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  GPIO_InitStruct.Alternate = GPIO_AF4_I2C2;
-  HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
