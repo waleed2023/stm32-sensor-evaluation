@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <math.h>
 #include "stm32u5xx_nucleo.h"
+#include "uart_comm.h"
 
 #define GYRO_THRESHOLD 200.0f
 #define PITCH_DELTA_THRESHOLD 30.0f
@@ -31,6 +32,8 @@ void Motion_Process(I2C_HandleTypeDef *hi2c, float base_pitch)
     float gyro_y_dps = gy * 0.07f;
 
     printf("Pitch: %.2f, Delta: %.2f, Gyro Y: %.2f °/s\n", pitch, delta, gyro_y_dps);
+    // UART3-Ausgabe für Python Visualisierung
+    SendToPython(pitch, delta, gyro_y_dps);
 
     // --- Kombinierte Entscheidung ---
     if (fabsf(delta) > PITCH_DELTA_THRESHOLD) {

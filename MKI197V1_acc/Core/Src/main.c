@@ -25,6 +25,8 @@
 #include "pitch_utils.h"
 #include "angle.h"
 #include "motion_analysis.h"
+#include "uart_comm.h"
+
 
 /* USER CODE END Includes */
 
@@ -50,6 +52,7 @@ COM_InitTypeDef BspCOMInit;
 I2C_HandleTypeDef hi2c2;
 
 UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 
@@ -62,6 +65,7 @@ static void MX_GPIO_Init(void);
 static void MX_ICACHE_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_USART3_UART_Init(void);
 /* USER CODE BEGIN PFP */
 #define DEMCR *((volatile uint32_t*) 0xE000EDFCu)
 #define ITM_TCR     (*(volatile uint32_t*)0xE0000E80)
@@ -88,14 +92,14 @@ void Enable_ITM_Trace(void) {
 //}
 
 // für UART Ausgabe
-int _write(int file, char *ptr, int len)
-{
-  for (int i = 0; i < len; i++)
-  {
-    ITM_SendChar((uint32_t)*ptr++);
-  }
-  return len;
-}
+//int _write(int file, char *ptr, int len)
+//{
+//  for (int i = 0; i < len; i++)
+//  {
+//    ITM_SendChar((uint32_t)*ptr++);
+//  }
+//  return len;
+//}
 
 
 
@@ -144,12 +148,10 @@ int main(void)
   MX_GPIO_Init();
   MX_ICACHE_Init();
   MX_I2C2_Init();
-  //scan_i2c_bus(&hi2c2);
-
-  LSM6DSOX_Init(&hi2c2);
   MX_USART2_UART_Init();
+  MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
-  Enable_ITM_Trace();
+  //Enable_ITM_Trace();
   // <--- WICHTIG!
 
   /* USER CODE END 2 */
@@ -185,6 +187,7 @@ int main(void)
   {
 
 	    Motion_Process(&hi2c2, base_pitch);
+	    UART_Comm_Process(&huart3);
 	    HAL_Delay(200);
     /* USER CODE END WHILE */
 
@@ -386,6 +389,54 @@ static void MX_USART2_UART_Init(void)
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
+  * @brief USART3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART3_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART3_Init 0 */
+
+  /* USER CODE END USART3_Init 0 */
+
+  /* USER CODE BEGIN USART3_Init 1 */
+
+  /* USER CODE END USART3_Init 1 */
+  huart3.Instance = USART3;
+  huart3.Init.BaudRate = 115200;
+  huart3.Init.WordLength = UART_WORDLENGTH_8B;
+  huart3.Init.StopBits = UART_STOPBITS_1;
+  huart3.Init.Parity = UART_PARITY_NONE;
+  huart3.Init.Mode = UART_MODE_TX_RX;
+  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart3.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart3.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart3.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetTxFifoThreshold(&huart3, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetRxFifoThreshold(&huart3, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_DisableFifoMode(&huart3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART3_Init 2 */
+
+  /* USER CODE END USART3_Init 2 */
 
 }
 
