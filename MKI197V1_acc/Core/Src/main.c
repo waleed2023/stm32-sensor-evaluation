@@ -22,6 +22,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "lsm6dsox.h"
+#include "motion_analysis.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -74,16 +76,16 @@ void Enable_ITM_Trace(void) {
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-void scan_i2c_bus(I2C_HandleTypeDef *hi2c) {
-    printf("Scanning I2C bus...\r\n");
-    for (uint8_t addr = 0; addr < 128; addr++) {
-        if (HAL_I2C_IsDeviceReady(hi2c, addr << 1, 1, 10) == HAL_OK) {
-            printf("Found device at 0x%02X\r\n", addr);
-        }
-    }
-}
+//void scan_i2c_bus(I2C_HandleTypeDef *hi2c) {
+//    printf("Scanning I2C bus...\r\n");
+//    for (uint8_t addr = 0; addr < 128; addr++) {
+//        if (HAL_I2C_IsDeviceReady(hi2c, addr << 1, 1, 10) == HAL_OK) {
+//            printf("Found device at 0x%02X\r\n", addr);
+//        }
+//    }
+//}
 
-
+// für UART Ausgabe
 int _write(int file, char *ptr, int len)
 {
   for (int i = 0; i < len; i++)
@@ -92,6 +94,9 @@ int _write(int file, char *ptr, int len)
   }
   return len;
 }
+
+
+
 
 
 /* Debug Exception and Monitor Control Register base address */
@@ -168,17 +173,49 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  // basis für Winkel
+  HAL_Delay(1000);
+  float base_pitch = 0.0f;
+  int16_t ax, ay, az;
+  if (LSM6DSOX_ReadAccel(&hi2c2, &ax, &ay, &az) == HAL_OK) {
+      base_pitch = Calculate_Pitch(ax, ay, az);
+      printf("Basiswinkel gesetzt: %.2f°\r\n", base_pitch);
+  } else {
+      printf("Fehler beim Lesen des Basiswinkels!\r\n");
+  }
   while (1)
   {
-	  int16_t ax, ay, az;
-	  	    if (LSM6DSOX_ReadAccel(&hi2c2, &ax, &ay, &az) == HAL_OK) {
-	  	    	BSP_LED_On(LED_GREEN);
-	  	        printf("X: %d, Y: %d, Z: %d\r\n", ax, ay, az);
+	    int16_t ax, ay, az;
+	    if (LSM6DSOX_ReadAccel(&hi2c2, &ax, &ay, &az) == HAL_OK)
+	    {
+	        float pitch = Calculate_Pitch(ax, ay, az);
+	        float delta = pitch - base_pitch;
 
-	  	    } else {
-	  	        printf("I2C Error\r\n");
-	  	        BSP_LED_On(LED_RED);
-	  	    }
+	        printf("Pitch: %.2f°, Delta: %.2f°\r\n", pitch, delta);
+
+	        if (delta > 30.0f) {
+	            printf("Arm gehoben\n");
+	            BSP_LED_On(LED_GREEN);
+	            BSP_LED_Off(LED_RED);
+	        }
+	        else if (delta < -30.0f) {
+	            printf("Arm gesenkt\n");
+	            BSP_LED_On(LED_RED);
+	            BSP_LED_Off(LED_GREEN);
+	        }
+	        else {
+	            printf("Arm ruhig\n");
+	            BSP_LED_Off(LED_GREEN);
+	            BSP_LED_Off(LED_RED);
+	        }
+	    }
+	    else
+	    {
+	        printf("I2C Fehler\r\n");
+	        BSP_LED_Toggle(LED_RED);
+	    }
+	    HAL_Delay(200);  // 5 Hz Abtastrate
 
     /* USER CODE END WHILE */
 
