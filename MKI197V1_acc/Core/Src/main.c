@@ -22,6 +22,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "lsm6dsox.h"
+#include "pitch_utils.h"
+#include "angle.h"
 #include "motion_analysis.h"
 
 /* USER CODE END Includes */
@@ -174,49 +176,16 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  // basis für Winkel
   HAL_Delay(1000);
-  float base_pitch = 0.0f;
-  int16_t ax, ay, az;
-  if (LSM6DSOX_ReadAccel(&hi2c2, &ax, &ay, &az) == HAL_OK) {
-      base_pitch = Calculate_Pitch(ax, ay, az);
-      printf("Basiswinkel gesetzt: %.2f°\r\n", base_pitch);
-  } else {
-      printf("Fehler beim Lesen des Basiswinkels!\r\n");
-  }
+  float base_pitch = Get_Base_Pitch(&hi2c2);
+  printf("Basiswinkel gesetzt (gemittelt): %.2f\r\n", base_pitch);
+
+
   while (1)
   {
-	    int16_t ax, ay, az;
-	    if (LSM6DSOX_ReadAccel(&hi2c2, &ax, &ay, &az) == HAL_OK)
-	    {
-	        float pitch = Calculate_Pitch(ax, ay, az);
-	        float delta = pitch - base_pitch;
 
-	        printf("Pitch: %.2f°, Delta: %.2f°\r\n", pitch, delta);
-
-	        if (delta > 30.0f) {
-	            printf("Arm gehoben\n");
-	            BSP_LED_On(LED_GREEN);
-	            BSP_LED_Off(LED_RED);
-	        }
-	        else if (delta < -30.0f) {
-	            printf("Arm gesenkt\n");
-	            BSP_LED_On(LED_RED);
-	            BSP_LED_Off(LED_GREEN);
-	        }
-	        else {
-	            printf("Arm ruhig\n");
-	            BSP_LED_Off(LED_GREEN);
-	            BSP_LED_Off(LED_RED);
-	        }
-	    }
-	    else
-	    {
-	        printf("I2C Fehler\r\n");
-	        BSP_LED_Toggle(LED_RED);
-	    }
-	    HAL_Delay(200);  // 5 Hz Abtastrate
-
+	    Motion_Process(&hi2c2, base_pitch);
+	    HAL_Delay(200);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

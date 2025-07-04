@@ -1,16 +1,16 @@
-#ifndef __MOTION_ANALYSIS_H__
-#define __MOTION_ANALYSIS_H__
+#ifndef MOTION_ANALYSIS_H_
+#define MOTION_ANALYSIS_H_
 
-#include <stdint.h>
+#include "stm32u5xx_hal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-float Calculate_Pitch(int16_t ax, int16_t ay, int16_t az);
+void Motion_Process(I2C_HandleTypeDef *hi2c, float base_pitch);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // __MOTION_ANALYSIS_H__
+#endif /* MOTION_ANALYSIS_H_ */
