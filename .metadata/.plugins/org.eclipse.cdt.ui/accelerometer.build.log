@@ -1,4 +1,4 @@
-16:59:59 **** Incremental Build of configuration Debug for project accelerometer ****
+12:15:56 **** Incremental Build of configuration Debug for project accelerometer ****
 make -j12 all 
 arm-none-eabi-size  accelerometer.elf 
    text	   data	    bss	    dec	    hex	filename
@@ -6,5 +6,5 @@ arm-none-eabi-size  accelerometer.elf
 Finished building: default.size.stdout
  
 
-16:59:59 Build Finished. 0 errors, 0 warnings. (took 542ms)
+12:15:57 Build Finished. 0 errors, 0 warnings. (took 885ms)
 

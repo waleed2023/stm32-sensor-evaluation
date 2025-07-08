@@ -82,14 +82,14 @@ void Enable_ITM_Trace(void) {
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-//void scan_i2c_bus(I2C_HandleTypeDef *hi2c) {
-//    printf("Scanning I2C bus...\r\n");
-//    for (uint8_t addr = 0; addr < 128; addr++) {
-//        if (HAL_I2C_IsDeviceReady(hi2c, addr << 1, 1, 10) == HAL_OK) {
-//            printf("Found device at 0x%02X\r\n", addr);
-//        }
-//    }
-//}
+void scan_i2c_bus(I2C_HandleTypeDef *hi2c) {
+    printf("Scanning I2C bus...\r\n");
+    for (uint8_t addr = 0; addr < 128; addr++) {
+        if (HAL_I2C_IsDeviceReady(hi2c, addr << 1, 1, 10) == HAL_OK) {
+            printf("Found device at 0x%02X\r\n", addr);
+        }
+    }
+}
 
 // für UART Ausgabe
 //int _write(int file, char *ptr, int len)
@@ -182,13 +182,13 @@ int main(void)
   float base_pitch = Get_Base_Pitch(&hi2c2);
   printf("Basiswinkel gesetzt (gemittelt): %.2f\r\n", base_pitch);
 
-
+  LSM6DSOX_Init(&hi2c2);
   while (1)
   {
 
 	    Motion_Process(&hi2c2, base_pitch);
 	    UART_Comm_Process(&huart3);
-	    HAL_Delay(200);
+	    HAL_Delay(100);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
