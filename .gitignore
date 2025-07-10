@@ -12,35 +12,7 @@
 *.log
 .metadata/
 
-# STM32CubeIDE / Eclipse workspace settings
-.settings/
-.project
-.cproject
 
 # STM32 build outputs
 Debug/
 Release/
-build/
-*.o
-*.d
-*.map
-*.elf
-*.bin
-*.hex
-*.lst
-*.srec
-
-# Generated files
-Core/Inc/stm32*
-Core/Src/stm32*
-
-# Backup files
-*~
-*.bak
-*.swp
-*.swo
-*.swn
-*.orig
-
-# Optional: Ignore CubeMX generated makefiles
-Makefile

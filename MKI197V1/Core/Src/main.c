@@ -22,6 +22,14 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "lsm6dsox.h"
+#include "pitch_utils.h"
+#include "angle.h"
+#include "motion_analysis.h"
+#include "uart_comm.h"
+#include "calibratebasepitch.h"
+#include <stdio.h>
+
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,6 +54,7 @@ COM_InitTypeDef BspCOMInit;
 I2C_HandleTypeDef hi2c2;
 
 UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 
@@ -58,8 +67,8 @@ static void MX_GPIO_Init(void);
 static void MX_ICACHE_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_USART3_UART_Init(void);
 /* USER CODE BEGIN PFP */
-
 #define DEMCR *((volatile uint32_t*) 0xE000EDFCu)
 #define ITM_TCR     (*(volatile uint32_t*)0xE0000E80)
 #define ITM_TER     (*(volatile uint32_t*)0xE0000E00)
@@ -69,22 +78,41 @@ void Enable_ITM_Trace(void) {
     ITM_TCR |= 1;          // ITM enable
     ITM_TER |= 1;          // Stimulus port 0 enable
 }
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-int _write(int file, char *ptr, int len)
-{
-  for (int i = 0; i < len; i++)
-  {
-    ITM_SendChar((uint32_t)*ptr++);
-  }
-  return len;
+
+void scan_i2c_bus(I2C_HandleTypeDef *hi2c) {
+    printf("Scanning I2C bus...\r\n");
+    for (uint8_t addr = 0; addr < 128; addr++) {
+        if (HAL_I2C_IsDeviceReady(hi2c, addr << 1, 1, 10) == HAL_OK) {
+            printf("Found device at 0x%02X\r\n", addr);
+        }
+    }
 }
+
+// für UART Ausgabe
+//int _write(int file, char *ptr, int len)
+//{
+//  for (int i = 0; i < len; i++)
+//  {
+//    ITM_SendChar((uint32_t)*ptr++);
+//  }
+//  return len;
+//}
+
+
+
+
+
 /* Debug Exception and Monitor Control Register base address */
 /* ITM register addresses */
 #define ITM_STIMULUS_PORT0 *((volatile uint32_t*) 0xE0000000u)
 #define ITM_TRACE_EN *((volatile uint32_t*) 0xE0000E00u)
+/* Send a char through ITM */
+
 
 /* USER CODE END 0 */
 
@@ -123,10 +151,10 @@ int main(void)
   MX_ICACHE_Init();
   MX_I2C2_Init();
   MX_USART2_UART_Init();
+  MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
-  Enable_ITM_Trace();
-  int16_t ax, ay, az;
-  LSM6DSOX_Init(&hi2c2);
+  //Enable_ITM_Trace();
+  // <--- WICHTIG!
 
   /* USER CODE END 2 */
 
@@ -151,19 +179,26 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  HAL_Delay(1000);
+  LSM6DSOX_Init(&hi2c2);
+  HAL_Delay(300); // FIFO mit ersten Samples füllen
+  float base_pitch = CalibrateBasePitch(&hi2c2);
+
+  //float base_pitch = Get_Base_Pitch(&hi2c2);
+  printf("Basiswinkel gesetzt (gemittelt): %.2f\r\n", base_pitch);
+
+
   while (1)
   {
+	  	// giving time for FIFO to Fill
+	    //HAL_Delay(100);
+	    Motion_Process_Improved(&hi2c2, base_pitch, HAL_GetTick());
+	    UART_Comm_Process(&huart3);
+	    HAL_Delay(100);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  BSP_LED_On(LED_BLUE);
-//	    if (LSM6DSOX_ReadAccel(&hi2c2, &ax, &ay, &az) == HAL_OK) {
-//	        printf("X: %d, Y: %d, Z: %d\r\n", ax, ay, az);
-//	        BSP_LED_Toggle(LED_GREEN);
-//	    } else {
-//	        printf("I2C Error\r\n");
-//	        BSP_LED_Toggle(LED_RED);
-//	    }
   }
   /* USER CODE END 3 */
 }
@@ -186,9 +221,10 @@ void SystemClock_Config(void)
 
   /** Initializes the CPU, AHB and APB buses clocks
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
+  RCC_OscInitStruct.MSIState = RCC_MSI_ON;
+  RCC_OscInitStruct.MSICalibrationValue = RCC_MSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_4;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -200,8 +236,8 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
                               |RCC_CLOCKTYPE_PCLK3;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV4;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_MSI;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB3CLKDivider = RCC_HCLK_DIV1;
@@ -218,7 +254,6 @@ void SystemClock_Config(void)
   */
 static void SystemPower_Config(void)
 {
-  HAL_PWREx_EnableVddIO2();
 
   /*
    * Disable the internal Pull-Up in Dead Battery pins of UCPD peripheral
@@ -365,13 +400,60 @@ static void MX_USART2_UART_Init(void)
 }
 
 /**
+  * @brief USART3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART3_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART3_Init 0 */
+
+  /* USER CODE END USART3_Init 0 */
+
+  /* USER CODE BEGIN USART3_Init 1 */
+
+  /* USER CODE END USART3_Init 1 */
+  huart3.Instance = USART3;
+  huart3.Init.BaudRate = 115200;
+  huart3.Init.WordLength = UART_WORDLENGTH_8B;
+  huart3.Init.StopBits = UART_STOPBITS_1;
+  huart3.Init.Parity = UART_PARITY_NONE;
+  huart3.Init.Mode = UART_MODE_TX_RX;
+  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart3.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart3.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart3.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetTxFifoThreshold(&huart3, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetRxFifoThreshold(&huart3, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_DisableFifoMode(&huart3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART3_Init 2 */
+
+  /* USER CODE END USART3_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
   */
 static void MX_GPIO_Init(void)
 {
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
@@ -380,38 +462,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOG_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOG, GPIO_PIN_2, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : PG2 */
-  GPIO_InitStruct.Pin = GPIO_PIN_2;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PC7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PB7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -440,6 +491,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
+
+
 
   /* USER CODE END Callback 1 */
 }
