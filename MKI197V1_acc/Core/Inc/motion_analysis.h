@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-void Motion_Process(I2C_HandleTypeDef *hi2c, float base_pitch);
+void Motion_Process_Improved(I2C_HandleTypeDef *hi2c, float basePitch, uint32_t timestamp_ms);
 
 #ifdef __cplusplus
 }

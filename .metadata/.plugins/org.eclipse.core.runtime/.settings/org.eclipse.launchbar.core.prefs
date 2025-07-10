@@ -1,11 +1,12 @@
 LaunchTargetManager/org.eclipse.launchbar.core.launchTargetType.local,Local/arch=x86_64
 LaunchTargetManager/org.eclipse.launchbar.core.launchTargetType.local,Local/name=Local
 LaunchTargetManager/org.eclipse.launchbar.core.launchTargetType.local,Local/os=win32
-configDescList=org.eclipse.launchbar.core.descriptorType.default\:accelerometer Debug (1),org.eclipse.launchbar.core.descriptorType.default\:accelerometer Debug (2),org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:accelerometer Debug,org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:MKI197V1 Debug,org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:MKI197V1_acc Debug
+configDescList=org.eclipse.launchbar.core.descriptorType.default\:accelerometer Debug (1),org.eclipse.launchbar.core.descriptorType.default\:accelerometer Debug (2),org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:MKI197V1_acc Debug
 eclipse.preferences.version=1
 org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:MKI197V1\ Debug/activeLaunchMode=debug
 org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:MKI197V1\ Debug/activeLaunchTarget=null\:---
 org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:MKI197V1_acc\ Debug/activeLaunchMode=debug
+org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:MKI197V1_acc\ Debug/activeLaunchTarget=null\:---
 org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:accelerometer\ Debug/activeLaunchMode=run
 org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:accelerometer\ Debug/activeLaunchTarget=null\:---
 org.eclipse.launchbar.core.descriptorType.default\:accelerometer\ Debug\ (1)/activeLaunchMode=run

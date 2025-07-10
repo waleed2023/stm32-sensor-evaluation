@@ -26,6 +26,8 @@
 #include "angle.h"
 #include "motion_analysis.h"
 #include "uart_comm.h"
+#include "calibratebasepitch.h"
+#include <stdio.h>
 
 
 /* USER CODE END Includes */
@@ -179,14 +181,19 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 
   HAL_Delay(1000);
-  float base_pitch = Get_Base_Pitch(&hi2c2);
+  LSM6DSOX_Init(&hi2c2);
+  HAL_Delay(300); // FIFO mit ersten Samples füllen
+  float base_pitch = CalibrateBasePitch(&hi2c2);
+
+  //float base_pitch = Get_Base_Pitch(&hi2c2);
   printf("Basiswinkel gesetzt (gemittelt): %.2f\r\n", base_pitch);
 
-  LSM6DSOX_Init(&hi2c2);
+
   while (1)
   {
-
-	    Motion_Process(&hi2c2, base_pitch);
+	  	// giving time for FIFO to Fill
+	    //HAL_Delay(100);
+	    Motion_Process_Improved(&hi2c2, base_pitch, HAL_GetTick());
 	    UART_Comm_Process(&huart3);
 	    HAL_Delay(100);
     /* USER CODE END WHILE */
