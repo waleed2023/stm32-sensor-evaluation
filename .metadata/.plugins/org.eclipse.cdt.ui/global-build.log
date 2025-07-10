@@ -187,3 +187,10 @@ Finished building: default.size.stdout
  
 Finished building: MKI197V1.list
  
+14:34:58 **** Incremental Build of configuration Debug for project MKI197V1 ****
+make -j12 all 
+arm-none-eabi-size  MKI197V1.elf 
+   text	   data	    bss	    dec	    hex	filename
+  51592	    496	   2560	  54648	   d578	MKI197V1.elf
+Finished building: default.size.stdout
+ 

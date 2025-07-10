@@ -371,3 +371,33 @@ Unable to read memory.
 java.lang.Exception: Unable to read memory.
 	at org.eclipse.cdt.dsf.mi.service.command.AbstractMIControl$RxThread.processMIOutput(AbstractMIControl.java:1024)
 	at org.eclipse.cdt.dsf.mi.service.command.AbstractMIControl$RxThread.run(AbstractMIControl.java:853)
+!SESSION 2025-07-10 14:34:28.749 -----------------------------------------------
+eclipse.buildId=Version 1.18.1
+java.version=21.0.3
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=win32, ARCH=x86_64, WS=win32, NL=de_DE
+Command-line arguments:  -os win32 -ws win32 -arch x86_64
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 4 4 2025-07-10 14:34:35.242
+!MESSAGE CubeMX plugin appears to be active, Log4j initialization might be too late.
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 1 1 2025-07-10 14:34:35.248
+!MESSAGE Log4j2 initialized with config file C:\localcheckouts\accelerometer\.metadata\.log4j2.xml
+
+!ENTRY com.st.stm32cube.ide.mcu.ide 1 1 2025-07-10 14:34:46.923
+!MESSAGE Started RMI Server, listening on port 41337
+
+!ENTRY com.st.stm32cube.ide.mcu.debug.swv 1 1 2025-07-10 14:35:09.384
+!MESSAGE SWV configuration; base: 192000000; minDiv: 16; maxDiv: 65535; maxSWO: 12000000; limit: 12000000 => SWO: 4000000; CPU: 4000000; div: 1
+
+!ENTRY org.eclipse.cdt.dsf 4 10005 2025-07-10 14:35:23.397
+!MESSAGE Request for monitor: '53^error,msg="Unable to read memory."' resulted in an error.
+!SUBENTRY 1 org.eclipse.cdt.dsf.gdb 4 10004 2025-07-10 14:35:23.397
+!MESSAGE Failed to execute MI command:
+-data-read-memory 0xe000ee08 d 1 1 4
+Error message from debugger back end:
+Unable to read memory.
+!STACK 0
+java.lang.Exception: Unable to read memory.
+	at org.eclipse.cdt.dsf.mi.service.command.AbstractMIControl$RxThread.processMIOutput(AbstractMIControl.java:1024)
+	at org.eclipse.cdt.dsf.mi.service.command.AbstractMIControl$RxThread.run(AbstractMIControl.java:853)
