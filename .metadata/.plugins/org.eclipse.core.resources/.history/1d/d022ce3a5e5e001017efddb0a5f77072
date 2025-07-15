@@ -1,0 +1,18 @@
+#include "lsm6dsox.h"
+#include "stm32u5xx_hal.h"
+#include "gyro_calibration.h"
+
+#define GYRO_SENSITIVITY_DPS_LSB  0.07f
+#define GYRO_BIAS_SAMPLES         500
+
+float CalibrateGyroBias(I2C_HandleTypeDef *hi2c) {
+    float sum = 0.0f;
+    int16_t gx, gy, gz;
+    for (int i = 0; i < GYRO_BIAS_SAMPLES; ++i) {
+        if (LSM6DSOX_ReadGyro(hi2c, &gx, &gy, &gz) == HAL_OK) {
+            sum += gy * GYRO_SENSITIVITY_DPS_LSB;
+        }
+        HAL_Delay(5);
+    }
+    return sum / (float)GYRO_BIAS_SAMPLES;
+}

@@ -1,0 +1,148 @@
+#include "motion_analysis.h"
+#include "lsm6dsox.h"
+#include "angle.h"
+#include "uart_comm.h"
+#include "stm32u5xx_nucleo.h"
+#include "complementary_filter.h"
+#include <stdbool.h>
+#include <math.h>
+#include <stdio.h>
+
+#define GYRO_SENSITIVITY_DPS_LSB   0.07f    // 0,07 °/s pro LSB bei ±2000 dps
+#define SLOW_ANGLE_THRESHOLD_DEG   4.0f     // Minimale Neigungsänderung für langsame Bewegung
+#define FAST_GYRO_THRESHOLD_DPS    600.0f   // Schwellwert für schnelle Bewegung (°/s)
+#define GYRO_DEADBAND_DPS          1.0f     // Unterdrückt Drift bei <1 °/s
+#define LED_BLINK_PERIOD_MS       100       // Blink-Intervall für schnelle Bewegungen
+
+typedef enum {
+    STATE_IDLE,
+    STATE_SLOW_UP,
+    STATE_SLOW_DOWN,
+    STATE_FAST_UP,
+    STATE_FAST_DOWN
+} MotionState;
+
+static MotionState currentState       = STATE_IDLE;
+static uint32_t    lastBlinkTime      = 0;
+static bool        filterInitialized  = false;
+static uint32_t    filterLastTs       = 0;
+
+void Motion_Process_Improved(I2C_HandleTypeDef *hi2c,
+                             float basePitch,
+                             float gyroBias,
+                             uint32_t timestamp_ms)
+{
+    // 1) FIFO-Länge prüfen
+    uint16_t samples = LSM6DSOX_GetFIFOLength(hi2c);
+    if (samples == 0) {
+        return;
+    }
+
+    // 2) Block-Read aller Samples
+    uint16_t bytes = samples * 7;
+    uint8_t buf[bytes];
+    HAL_I2C_Mem_Read(hi2c, LSM6DSOX_I2C_ADDR, 0x78, 1, buf, bytes, HAL_MAX_DELAY);
+
+    // 3) Summen und Zähler initialisieren
+    uint32_t accelCount = 0, gyroCount = 0;
+    float    pitchSum   = 0.0f, gyroSum = 0.0f;
+
+    for (uint16_t i = 0; i < samples; ++i) {
+        uint8_t  tag = buf[i*7];
+        int16_t  ax  = (buf[i*7+2] << 8) | buf[i*7+1];
+        int16_t  ay  = (buf[i*7+4] << 8) | buf[i*7+3];
+        int16_t  az  = (buf[i*7+6] << 8) | buf[i*7+5];
+        uint8_t  type= tag & 0x1F;
+        //printf("Tag=%02x, ax=%d, ay=%d, az=%d, type=%d\n", tag, ax, ay, az, type);
+
+
+           if (type == 0x01 || type == 0x11) {
+               // Accelerometer
+               pitchSum  += Calculate_Pitch(ax, ay, az);
+               accelCount++;
+           }
+           else if (type == 0x02 || type == 0x12) {
+               // Gyro Y
+               gyroSum   += ay * GYRO_SENSITIVITY_DPS_LSB;
+               gyroCount++;
+           }
+
+        // else: Timestamp/Temp ignorieren
+    }
+
+    // 4) Mittelwerte berechnen
+    float avgAccelPitch = (accelCount > 0) ? (pitchSum / accelCount) : 0.0f;
+    float avgGyroY_raw  = (gyroCount  > 0) ? (gyroSum  / gyroCount)  : 0.0f;
+
+    // 5) Bias-Abzug + Deadband
+    float avgGyroY = avgGyroY_raw - gyroBias;
+    if (fabsf(avgGyroY) < GYRO_DEADBAND_DPS) {
+        avgGyroY = 0.0f;
+    }
+
+    // 6) Filter initialisieren
+    if (!filterInitialized) {
+        ComplementaryFilter_Init(avgAccelPitch);
+        filterLastTs      = timestamp_ms;
+        filterInitialized = true;
+    }
+
+    // 7) Filter-Schritt
+    float dt         = (timestamp_ms - filterLastTs) * 0.001f;
+    filterLastTs     = timestamp_ms;
+    float fusedPitch = ComplementaryFilter_Update(avgAccelPitch, avgGyroY, dt);
+
+    // 8) Winkelabweichung zur Basis
+    float deltaAngle = fusedPitch - basePitch;
+
+    // 9) Zustand ermitteln
+    bool isFast = fabsf(avgGyroY) >= FAST_GYRO_THRESHOLD_DPS;
+    bool isSlow = fabsf(deltaAngle) >= SLOW_ANGLE_THRESHOLD_DEG;
+    MotionState newState = STATE_IDLE;
+
+    if (isFast) {
+        newState = (deltaAngle > 0) ? STATE_FAST_UP   : STATE_FAST_DOWN;
+    } else if (isSlow) {
+        newState = (deltaAngle > 0) ? STATE_SLOW_UP   : STATE_SLOW_DOWN;
+    }
+
+    // 10) Bei Zustandswechsel zurücksetzen & Nachricht
+    if (newState != currentState) {
+        BSP_LED_Off(LED_GREEN);
+        BSP_LED_Off(LED_RED);
+        lastBlinkTime = timestamp_ms;
+
+        switch (newState) {
+            case STATE_SLOW_UP:    printf("Langsame Bewegung nach oben\n");  break;
+            case STATE_SLOW_DOWN:  printf("Langsame Bewegung nach unten\n"); break;
+            case STATE_FAST_UP:    printf("Schnelle Bewegung nach oben\n");  break;
+            case STATE_FAST_DOWN:  printf("Schnelle Bewegung nach unten\n"); break;
+            default: break;
+        }
+        currentState = newState;
+    }
+
+    // 11) LED-Steuerung
+    switch (currentState) {
+        case STATE_SLOW_UP:    BSP_LED_On(LED_GREEN);  break;
+        case STATE_SLOW_DOWN:  BSP_LED_On(LED_RED);    break;
+        case STATE_FAST_UP:
+            if ((timestamp_ms - lastBlinkTime) >= LED_BLINK_PERIOD_MS) {
+                BSP_LED_Toggle(LED_GREEN);
+                lastBlinkTime = timestamp_ms;
+            }
+            break;
+        case STATE_FAST_DOWN:
+            if ((timestamp_ms - lastBlinkTime) >= LED_BLINK_PERIOD_MS) {
+                BSP_LED_Toggle(LED_RED);
+                lastBlinkTime = timestamp_ms;
+            }
+            break;
+        default: break;
+    }
+
+    // 12) Telemetrie
+    printf("FusedPitch=%.1f°, Δ=%.1f°, GyroY=%.1f°/s, State=%d\n",
+           fusedPitch, deltaAngle, avgGyroY, currentState);
+    SendToPython(fusedPitch, deltaAngle, avgGyroY);
+}

@@ -1,0 +1,174 @@
+#include "motion_analysis.h"
+#include "lsm6dsox.h"
+#include "angle.h"
+#include "uart_comm.h"
+#include "stm32u5xx_nucleo.h"
+#include "complementary_filter.h"
+#include <stdbool.h>
+#include <math.h>
+#include <stdio.h>
+
+#define GYRO_SENSITIVITY_DPS_LSB   0.07f
+#define SLOW_ANGLE_THRESHOLD_DEG   4.0f
+#define FAST_GYRO_THRESHOLD_DPS    600.0f
+#define GYRO_DEADBAND_DPS          1.0f
+#define LED_BLINK_PERIOD_MS       100
+#define MAX_FIFO_SAMPLES         256
+
+// Motion state machine states
+typedef enum {
+    STATE_IDLE,
+    STATE_SLOW_UP,
+    STATE_SLOW_DOWN,
+    STATE_FAST_UP,
+    STATE_FAST_DOWN
+} MotionState;
+
+static MotionState  currentState      = STATE_IDLE;
+static uint32_t     lastBlinkTime     = 0;
+static bool         filterInitialized = false;
+static uint32_t     filterLastTs      = 0;
+
+// Calibrates the gyroscope Y-axis bias by averaging N samples
+static float CalibrateGyroBias(I2C_HandleTypeDef *hi2c) {
+    const int N = 500;
+    int32_t sumY = 0;
+    int16_t gx, gy, gz;
+    for (int i = 0; i < N; ++i) {
+        HAL_Delay(5);
+        LSM6DSOX_ReadGyro(hi2c, &gx, &gy, &gz);
+        sumY += gy;
+    }
+    return (sumY / (float)N) * GYRO_SENSITIVITY_DPS_LSB;
+}
+
+// Flushes any remaining samples from the FIFO
+static void FlushFIFO(I2C_HandleTypeDef *hi2c) {
+    while (LSM6DSOX_GetFIFOLength(hi2c) > 0) {
+        uint8_t tag;
+        int16_t ax, ay, az;
+        LSM6DSOX_ReadFIFOSample(hi2c, &tag, &ax, &ay, &az);
+    }
+}
+
+// Initializes the motion analysis: sensor, FIFO, bias, filter
+void Motion_Init(I2C_HandleTypeDef *hi2c) {
+    LSM6DSOX_Init(hi2c);
+    HAL_Delay(30);  // Allow FIFO to fill
+
+    FlushFIFO(hi2c);
+    float gyroBiasY = CalibrateGyroBias(hi2c);
+    printf("GyroBiasY = %.2f °/s\n", gyroBiasY);
+
+    // Read one accel sample to initialize filter
+    uint8_t tag;
+    int16_t ax, ay, az;
+    do {} while (!LSM6DSOX_ReadFIFOSample(hi2c, &tag, &ax, &ay, &az));
+    float initPitch = Calculate_Pitch(ax, ay, az);
+    ComplementaryFilter_Init(initPitch);
+    filterInitialized = true;
+}
+
+// Processes FIFO data, applies bias compensation, complementary filter, and state machine
+void Motion_Process_Improved(I2C_HandleTypeDef *hi2c,
+                             float basePitch,
+                             float gyroBias,
+                             uint32_t timestamp_ms)
+{
+    uint16_t samples = LSM6DSOX_GetFIFOLength(hi2c);
+    if (samples == 0) return;
+    if (samples > MAX_FIFO_SAMPLES) samples = MAX_FIFO_SAMPLES;
+
+    // Initialize accumulators
+    uint32_t accelCount = 0, gyroCount = 0;
+    float pitchSum = 0.0f, gyroSum = 0.0f;
+
+    // Read each sample individually
+    for (uint16_t i = 0; i < samples; ++i) {
+        uint8_t tag;
+        int16_t x, y, z;
+        if (!LSM6DSOX_ReadFIFOSample(hi2c, &tag, &x, &y, &z)) break;
+        uint8_t type = tag & 0x1F;
+        if (type == 0x01 || type == 0x11) {
+            pitchSum += Calculate_Pitch(x, y, z);
+            accelCount++;
+        } else if (type == 0x02 || type == 0x12) {
+            gyroSum += y * GYRO_SENSITIVITY_DPS_LSB;
+            gyroCount++;
+        }
+    }
+
+    // Compute averages
+    float avgAccelPitch = (accelCount > 0) ? (pitchSum / accelCount) : 0.0f;
+    float avgGyroY_raw  = (gyroCount  > 0) ? (gyroSum  / gyroCount)  : 0.0f;
+    float avgGyroY = avgGyroY_raw - gyroBias;
+    if (fabsf(avgGyroY) < GYRO_DEADBAND_DPS) avgGyroY = 0.0f;
+
+    // Initialize filter on first run
+    if (!filterInitialized) {
+        ComplementaryFilter_Init(avgAccelPitch);
+        filterLastTs      = timestamp_ms;
+        filterInitialized = true;
+    }
+
+    // Update complementary filter
+    float dt = (timestamp_ms - filterLastTs) * 0.001f;
+    filterLastTs = timestamp_ms;
+    float fusedPitch = ComplementaryFilter_Update(avgAccelPitch, avgGyroY, dt);
+
+    // Compute angle deviation and motion state
+    float deltaAngle = fusedPitch - basePitch;
+    bool isFast = fabsf(avgGyroY) >= FAST_GYRO_THRESHOLD_DPS;
+    bool isSlow = fabsf(deltaAngle) >= SLOW_ANGLE_THRESHOLD_DEG;
+
+    MotionState newState = STATE_IDLE;
+    if (isFast) {
+        newState = (deltaAngle > 0) ? STATE_FAST_UP : STATE_FAST_DOWN;
+    } else if (isSlow) {
+        newState = (deltaAngle > 0) ? STATE_SLOW_UP : STATE_SLOW_DOWN;
+    }
+
+    // On state change, reset LEDs and print
+    if (newState != currentState) {
+        BSP_LED_Off(LED_GREEN);
+        BSP_LED_Off(LED_RED);
+        lastBlinkTime = timestamp_ms;
+        switch (newState) {
+            case STATE_SLOW_UP:    printf("Langsame Bewegung nach oben\n");  break;
+            case STATE_SLOW_DOWN:  printf("Langsame Bewegung nach unten\n"); break;
+            case STATE_FAST_UP:    printf("Schnelle Bewegung nach oben\n");  break;
+            case STATE_FAST_DOWN:  printf("Schnelle Bewegung nach unten\n"); break;
+            default: break;
+        }
+        currentState = newState;
+    }
+
+    // LED behavior
+    switch (currentState) {
+        case STATE_SLOW_UP:
+            BSP_LED_On(LED_GREEN);
+            break;
+        case STATE_SLOW_DOWN:
+            BSP_LED_On(LED_RED);
+            break;
+        case STATE_FAST_UP:
+            if ((timestamp_ms - lastBlinkTime) >= LED_BLINK_PERIOD_MS) {
+                BSP_LED_Toggle(LED_GREEN);
+                lastBlinkTime = timestamp_ms;
+            }
+            break;
+        case STATE_FAST_DOWN:
+            if ((timestamp_ms - lastBlinkTime) >= LED_BLINK_PERIOD_MS) {
+                BSP_LED_Toggle(LED_RED);
+                lastBlinkTime = timestamp_ms;
+            }
+            break;
+        default:
+            break;
+    }
+
+    // Telemetry output
+    printf("FusedPitch=%.1f°, Δ=%.1f°, GyroY=%.1f°/s, State=%d\n",
+           fusedPitch, deltaAngle, avgGyroY, currentState);
+    SendToPython(fusedPitch, deltaAngle, avgGyroY);
+}

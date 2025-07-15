@@ -1,10 +1,17 @@
-14:34:58 **** Incremental Build of configuration Debug for project MKI197V1 ****
+11:34:15 **** Incremental Build of configuration Debug for project MKI197V1 ****
 make -j12 all 
+arm-none-eabi-gcc "../Core/Src/lsm6dsox.c" -mcpu=cortex-m33 -std=gnu11 -g -DDEBUG -DUSE_NUCLEO_64 -DUSE_HAL_DRIVER -DSTM32U575xx -c -I../Core/Inc -I../Drivers/STM32U5xx_HAL_Driver/Inc -I../Drivers/STM32U5xx_HAL_Driver/Inc/Legacy -I../Drivers/BSP/STM32U5xx_Nucleo -I../Drivers/CMSIS/Device/ST/STM32U5xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/lsm6dsox.d" -MT"Core/Src/lsm6dsox.o" --specs=nano.specs -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/lsm6dsox.o"
+arm-none-eabi-gcc -o "MKI197V1.elf" @"objects.list"   -mcpu=cortex-m33 -T"C:\localcheckouts\BA\accelerometer\MKI197V1\STM32U575ZITXQ_FLASH.ld" --specs=nosys.specs -Wl,-Map="MKI197V1.map" -Wl,--gc-sections -static -u _printf_float --specs=nano.specs -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: MKI197V1.elf
+ 
 arm-none-eabi-size  MKI197V1.elf 
+arm-none-eabi-objdump -h -S MKI197V1.elf  > "MKI197V1.list"
    text	   data	    bss	    dec	    hex	filename
-  51592	    496	   2560	  54648	   d578	MKI197V1.elf
+  52272	    496	   4352	  57120	   df20	MKI197V1.elf
 Finished building: default.size.stdout
  
+Finished building: MKI197V1.list
+ 
 
-14:35:00 Build Finished. 0 errors, 0 warnings. (took 2s.135ms)
+11:34:16 Build Finished. 0 errors, 0 warnings. (took 1s.919ms)
 

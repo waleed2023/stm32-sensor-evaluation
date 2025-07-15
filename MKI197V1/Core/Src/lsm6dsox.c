@@ -1,6 +1,3 @@
-#ifndef LSM6DSOX_CLEAN_H
-#define LSM6DSOX_CLEAN_H
-
 #include <stdbool.h>
 #include "lsm6dsox.h"
 
@@ -22,19 +19,19 @@ void LSM6DSOX_Init(I2C_HandleTypeDef *hi2c) {
     HAL_Delay(100);
 
     /* Enable Block Data Update and auto-increment */
-    data = 0x44;
+    data = 0x44 | 0x40;
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x12, 1, &data, 1, HAL_MAX_DELAY);
 
     /* Enable timestamp for FIFO */
     data = 0x20;
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x19, 1, &data, 1, HAL_MAX_DELAY);
 
-    /* Set FIFO batch rates: Gyro & Accel @ 104 Hz */
-    data = (0x04 << 4) | 0x04;
+    /* Set FIFO batch rates: Gyro & Accel @ 416 Hz */
+    data = (0x04 << 4) | 0x01;//0x06;
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x09, 1, &data, 1, HAL_MAX_DELAY);
 
     /* FIFO watermark level (LSB & MSB) */
-    data = 10;
+    data = 8;
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x07, 1, &data, 1, HAL_MAX_DELAY);
     data = 0x00;
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x08, 1, &data, 1, HAL_MAX_DELAY);
@@ -52,12 +49,12 @@ void LSM6DSOX_Init(I2C_HandleTypeDef *hi2c) {
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x15, 1, &data, 1, HAL_MAX_DELAY);
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x16, 1, &data, 1, HAL_MAX_DELAY);
 
-    /* Start accelerometer @ 104 Hz, ±2g */
-    data = 0x40;
+    /* Start accelerometer @ 416  Hz, ±2g */
+    data = 0x60;
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x10, 1, &data, 1, HAL_MAX_DELAY);
 
-    /* Start gyroscope @ 104 Hz, ±2000 dps */
-    data = 0x4C;
+    /* Start gyroscope @ 416  Hz, ±2000 dps */
+    data = 0x6C;
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x11, 1, &data, 1, HAL_MAX_DELAY);
 
     HAL_Delay(100);
@@ -150,4 +147,3 @@ uint16_t LSM6DSOX_GetFIFOLength(I2C_HandleTypeDef *hi2c) {
     return (uint16_t)(((status[1] & 0x03) << 8) | status[0]);
 }
 
-#endif // LSM6DSOX_CLEAN_H

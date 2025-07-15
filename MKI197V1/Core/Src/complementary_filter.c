@@ -1,9 +1,12 @@
 #include "complementary_filter.h"
+#include <math.h>
 
 // Gewichtungsfaktor für Gyro vs. Accelerometer (zwischen 0 und 1)
-#define ALPHA 0.98f
+#ifndef ALPHA
+#define ALPHA 0.99f
+#endif
 
-// Interner Zähler für den gefilterten Pitch-Winkel
+// Interner Zustand für den gefilterten Pitch-Winkel
 static float fusedPitch = 0.0f;
 
 void ComplementaryFilter_Init(float accelPitch) {
@@ -11,9 +14,10 @@ void ComplementaryFilter_Init(float accelPitch) {
 }
 
 float ComplementaryFilter_Update(float accelPitch, float gyroYdps, float dt) {
-    // Integriere Gyro-Daten
     float gyroComponent = fusedPitch + gyroYdps * dt;
-    // Kombiniere mit Accel-Pitch
-    fusedPitch = ALPHA * gyroComponent + (1.0f - ALPHA) * accelPitch;
+
+    //fusedPitch = ALPHA * gyroComponent + (1.0f - ALPHA) * accelPitch;
+    fusedPitch = gyroComponent;
+
     return fusedPitch;
 }
