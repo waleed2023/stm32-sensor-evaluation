@@ -3,6 +3,14 @@
 	<item key="hasShownOverlayPopupBefore" value="true"/>
 	<item key="replaceBarOpen" value="false"/>
 	<list key="searchhistory">
+		<item value="huart2"/>
+		<item value="0x7C"/>
+		<item value="data = 0x70;"/>
+		<item value="data = 0x70; "/>
+		<item value="data = (0x08 &lt;&lt; 4) | 0x08;"/>
+		<item value="0x09"/>
+		<item value="0x9"/>
+		<item value="LSM6DSOX_GetFIFOLength"/>
 		<item value="Get_Base_Pitch"/>
 		<item value="Watermark"/>
 	</list>

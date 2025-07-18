@@ -26,8 +26,9 @@ void LSM6DSOX_Init(I2C_HandleTypeDef *hi2c) {
     data = 0x20;
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x19, 1, &data, 1, HAL_MAX_DELAY);
 
-    /* Set FIFO batch rates: Gyro & Accel @ 416 Hz */
-    data = (0x04 << 4) | 0x01;//0x06;
+    /* Set FIFO batch rates: Gyro & Accel @ 833 Hz */
+    //data = (0x08 << 4) | 0x08;  // Gyro=833 Hz, Accel=833 Hz
+    data = (0x0A << 4) | 0x0A;  // Gyro=1667 Hz, Accel=1667 Hz
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x09, 1, &data, 1, HAL_MAX_DELAY);
 
     /* FIFO watermark level (LSB & MSB) */
@@ -40,8 +41,8 @@ void LSM6DSOX_Init(I2C_HandleTypeDef *hi2c) {
     data = 0x06;
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x0A, 1, &data, 1, HAL_MAX_DELAY);
 
-    /* Route Accel + Gyro data into FIFO @ 104 Hz */
-    data = 0x44;
+    /* Route Accel + Gyro data into FIFO (CTRL5) */
+    data = 0x44;  // Enable Accel + Gyro in FIFO
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x0B, 1, &data, 1, HAL_MAX_DELAY);
 
     /* Set high-performance mode for accelerometer and gyroscope */
@@ -49,12 +50,14 @@ void LSM6DSOX_Init(I2C_HandleTypeDef *hi2c) {
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x15, 1, &data, 1, HAL_MAX_DELAY);
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x16, 1, &data, 1, HAL_MAX_DELAY);
 
-    /* Start accelerometer @ 416  Hz, ±2g */
-    data = 0x60;
+    /* Start accelerometer @ 833  Hz, ±2g  */
+    //data = 0x70;
+    data = 0x90;  // ODR_XL = 1667 Hz (0b1001), FS_XL = ±2g (0b00)
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x10, 1, &data, 1, HAL_MAX_DELAY);
 
-    /* Start gyroscope @ 416  Hz, ±2000 dps */
-    data = 0x6C;
+    /*  Start gyroscope @ 833  Hz, ±2000 dps */
+    //data = 0x7C;
+    data = 0x9C;  // ODR_G = 1667 Hz (0b1001), FS_G = ±2000 dps (0b11)
     HAL_I2C_Mem_Write(hi2c, LSM6DSOX_I2C_ADDR, 0x11, 1, &data, 1, HAL_MAX_DELAY);
 
     HAL_Delay(100);

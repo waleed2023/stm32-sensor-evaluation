@@ -170,12 +170,14 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#define GYRO_SENS_DPS_PER_LSB   0.07f
-#define SLOW_ANGLE_THRES_DEG    4.0f
-#define FAST_GYRO_THRES_DPS     600.0f
-#define GYRO_DEADBAND_DPS       1.0f
+#define GYRO_SENS_DPS_PER_LSB   0.01f
+#define SLOW_ANGLE_THRES_DEG    5.0f
+#define FAST_GYRO_THRES_DPS     300.0f
+#define GYRO_DEADBAND_DPS       4.0f
 #define LED_BLINK_MS            100
 #define MAX_SAMPLES             256
+
+static int printCounter = 0;
 
 typedef enum { IDLE, SLOW_UP, SLOW_DOWN, FAST_UP, FAST_DOWN } MotionState;
 
@@ -195,7 +197,7 @@ void Motion_Process_Improved(I2C_HandleTypeDef *hi2c,
     if (n > MAX_SAMPLES) n = MAX_SAMPLES;
 
     //printf("N: %u \n", n);
-
+    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_6);
     for (uint16_t i = 0; i < n; ++i) {
 
 
@@ -220,21 +222,27 @@ void Motion_Process_Improved(I2C_HandleTypeDef *hi2c,
         uint32_t accelCnt = 0, gyroCnt = 0;
         float pitchSum = 0, gyroSum = 0;
 
+        //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
 
         //printf("Tag: 0x%02X\n", tag);
         if (isAccel) {
-        	printf("0x%02X (%u) im in Accel 0x%04X 0x%04X 0x%04X | %i %i %i", tag, n, ax, ay, az, ax, ay, az);
+        	//printf("0x%02X (%u) im in Accel 0x%04X 0x%04X 0x%04X | %i %i %i", tag, n, ax, ay, az, ax, ay, az);
             pitchSum += Calculate_Pitch(ax, ay, az);
             accelCnt++;
 
-            //TODO toogle pin 1
+            //TODO toggle pin 1
+            //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
+
+
         }
         else if (isGyro) {
-        	printf("0x%02X (%u) im in Gyro 0x%04X 0x%04X 0x%04X | %i %i %i", tag, n, ax, ay, az, ax, ay, az);
+        	//printf("0x%02X (%u) im in Gyro 0x%04X 0x%04X 0x%04X | %i %i %i", tag, n, ax, ay, az, ax, ay, az);
             gyroSum  += ay * GYRO_SENS_DPS_PER_LSB;
             gyroCnt++;
 
-            //TODO toogle pin 2
+            //TODO toggle pin 2
+            //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
+
         }
 
 		// AVG Winkel & Geschwindigkeit
@@ -261,23 +269,22 @@ void Motion_Process_Improved(I2C_HandleTypeDef *hi2c,
 		if (fast)      newState = (delta > 0) ? FAST_UP   : FAST_DOWN;
 		else if (slow) newState = (delta > 0) ? SLOW_UP   : SLOW_DOWN;
 
-		if (newState != state) {
-			BSP_LED_Off(LED_GREEN);
-			BSP_LED_Off(LED_RED);
-			lastBlink = ts;
-			switch (newState) {
-				case IDLE: 		puts("IDLE");				   break;
-				case SLOW_UP:   puts("Langsame Bewegung ↑");   break;
-				case SLOW_DOWN: puts("Langsame Bewegung ↓");   break;
-				case FAST_UP:   puts("Schnelle Bewegung ↑");   break;
-				case FAST_DOWN: puts("Schnelle Bewegung ↓");   break;
-				default: break;
-			}
-			state = newState;
-		}
+//		if (newState != state) {
+//			BSP_LED_Off(LED_GREEN);
+//			BSP_LED_Off(LED_RED);
+//			lastBlink = ts;
+//			switch (newState) {
+//				case IDLE: 		puts("IDLE");				   break;
+//				case SLOW_UP:   puts("Langsame Bewegung ↑");   break;
+//				case SLOW_DOWN: puts("Langsame Bewegung ↓");   break;
+//				case FAST_UP:   puts("Schnelle Bewegung ↑");   break;
+//				case FAST_DOWN: puts("Schnelle Bewegung ↓");   break;
+//				default: break;
+//			}
+//			state = newState;
+//		}
 
 		switch (state) {
-			case IDLE: BSP_LED_Off(LED_GREEN); BSP_LED_Off(LED_RED); break;
 			case SLOW_UP:   BSP_LED_On(LED_GREEN); break;
 			case SLOW_DOWN: BSP_LED_On(LED_RED);   break;
 			case FAST_UP:
@@ -295,9 +302,14 @@ void Motion_Process_Improved(I2C_HandleTypeDef *hi2c,
 			default: break;
 		}
 
-		printf("Pitch=%.1f°, Δ=%.1f°, Gyro=%.1f°/s, State=%d\n",
-			   fused, delta, avgGyro, state);
-		SendToPython(fused, delta, avgGyro);
+		if (++printCounter >= 180) {
+		    printCounter = 0;
+		    printf("FusedPitch=%.1f°, Δ=%.1f°, GyroY=%.1f°/s, State=%d\n",
+		           fused, delta, avgGyro, state);
+		}
+
+		//SendToPython(fused, delta, avgGyro);
     }
 }
+
 

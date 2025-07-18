@@ -6,7 +6,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+void Set_PitchOffset(float offset);
 float Calculate_Pitch(int16_t ax, int16_t ay, int16_t az);
 
 #ifdef __cplusplus
