@@ -1,0 +1,163 @@
+#include "motion_analysis.h"
+#include "lsm6dsox.h"
+#include "angle.h"
+#include "uart_comm.h"
+#include "stm32u5xx_nucleo.h"
+#include "complementary_filter.h"
+#include <math.h>
+#include <stdbool.h>
+#include <stdio.h>
+
+#define GYRO_SENS_DPS_PER_LSB   0.01f
+#define SLOW_ANGLE_THRES_DEG    5.0f
+#define FAST_GYRO_THRES_DPS     300.0f
+#define GYRO_DEADBAND_DPS       4.0f
+#define LED_BLINK_MS            100
+#define MAX_SAMPLES             256
+
+static int printCounter = 0;
+// just for testing without filter
+static float lastAccelPitch = 0.0f;
+
+
+typedef enum { IDLE, SLOW_UP, SLOW_DOWN, FAST_UP, FAST_DOWN } MotionState;
+
+static MotionState state       = IDLE;
+static uint32_t    lastBlink   = 0;
+static bool        initialized = false;
+static uint32_t    lastTs      = 0;
+static uint8_t     fifoBuf[MAX_SAMPLES * 7];
+
+void Motion_Process_Improved(I2C_HandleTypeDef *hi2c,
+                             float basePitch,
+                             float gyroBias,
+                             uint32_t ts)
+{
+    uint16_t n = LSM6DSOX_GetFIFOLength(hi2c);
+    if (n == 0) return;
+    if (n > MAX_SAMPLES) n = MAX_SAMPLES;
+
+    //printf("N: %u \n", n);
+    //HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+
+    for (uint16_t i = 0; i < n; ++i) {
+
+
+		HAL_I2C_Mem_Read(hi2c,
+						 LSM6DSOX_I2C_ADDR,
+						 0x78, 1,
+						 fifoBuf,
+						 7,
+						 HAL_MAX_DELAY);
+
+		uint8_t tag = (fifoBuf[0] & 0xF8)  >> 3;
+
+		//printf("Tag: 0x%02X (0x%02X)\n", tag, fifoBuf[0]);
+
+        bool isGyro  = (tag == 0x01) || (tag >= 0x0A && tag <= 0x0D);
+        bool isAccel = (tag == 0x02) || (tag >= 0x06 && tag <= 0x09);
+
+        int16_t ax = (fifoBuf[2] << 8) | fifoBuf[1];
+        int16_t ay = (fifoBuf[4] << 8) | fifoBuf[3];
+        int16_t az = (fifoBuf[6] << 8) | fifoBuf[5];
+
+        uint32_t accelCnt = 0, gyroCnt = 0;
+        float pitchSum = 0, gyroSum = 0;
+
+
+
+        //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
+
+        //printf("Tag: 0x%02X\n", tag);
+        if (isAccel) {
+        	//printf("0x%02X (%u) im in Accel 0x%04X 0x%04X 0x%04X | %i %i %i", tag, n, ax, ay, az, ax, ay, az);
+            pitchSum += Calculate_Pitch(ax, ay, az);
+            accelCnt++;
+            HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_6);
+            //TODO toggle pin 1
+            //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
+
+
+        }
+        else if (isGyro) {
+        	//printf("0x%02X (%u) im in Gyro 0x%04X 0x%04X 0x%04X | %i %i %i", tag, n, ax, ay, az, ax, ay, az);
+            gyroSum  += ay * GYRO_SENS_DPS_PER_LSB;
+            gyroCnt++;
+
+            //TODO toggle pin 2
+            //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
+
+        }
+
+		// AVG Winkel & Geschwindigkeit
+		float avgPitch = accelCnt ? (pitchSum / accelCnt) : 0;
+		float avgGyro  = gyroCnt  ? (gyroSum / gyroCnt)  : 0;
+		// testing without filter
+		if (accelCnt) {
+		    lastAccelPitch = avgPitch;
+		}
+		avgGyro -= gyroBias;
+		if (fabsf(avgGyro) < GYRO_DEADBAND_DPS) avgGyro = 0;
+
+		if (!initialized) {
+			ComplementaryFilter_Init(avgPitch);
+			lastTs      = ts;
+			initialized = true;
+		}
+		// complementary filter
+		float dt    = (ts - lastTs) * 1e-3f;
+		lastTs      = ts;
+		//float fused = avgPitch;
+		float fused = ComplementaryFilter_Update(avgPitch, avgGyro, dt);
+
+		float delta = fused - basePitch;
+		bool fast   = fabsf(avgGyro) >= FAST_GYRO_THRES_DPS;
+		bool slow   = fabsf(delta)   >= SLOW_ANGLE_THRES_DEG;
+		MotionState newState = IDLE;
+
+		if (fast)      newState = (delta > 0) ? FAST_UP   : FAST_DOWN;
+		else if (slow) newState = (delta > 0) ? SLOW_UP   : SLOW_DOWN;
+
+//		if (newState != state) {
+//			BSP_LED_Off(LED_GREEN);
+//			BSP_LED_Off(LED_RED);
+//			lastBlink = ts;
+//			switch (newState) {
+//				case IDLE: 		puts("IDLE");				   break;
+//				case SLOW_UP:   puts("Langsame Bewegung ↑");   break;
+//				case SLOW_DOWN: puts("Langsame Bewegung ↓");   break;
+//				case FAST_UP:   puts("Schnelle Bewegung ↑");   break;
+//				case FAST_DOWN: puts("Schnelle Bewegung ↓");   break;
+//				default: break;
+//			}
+//			state = newState;
+//		}
+
+		switch (state) {
+			case SLOW_UP:   BSP_LED_On(LED_GREEN); break;
+			case SLOW_DOWN: BSP_LED_On(LED_RED);   break;
+			case FAST_UP:
+				if (ts - lastBlink >= LED_BLINK_MS) {
+					BSP_LED_Toggle(LED_GREEN);
+					lastBlink = ts;
+				}
+				break;
+			case FAST_DOWN:
+				if (ts - lastBlink >= LED_BLINK_MS) {
+					BSP_LED_Toggle(LED_RED);
+					lastBlink = ts;
+				}
+				break;
+			default: break;
+		}
+
+		if (++printCounter >= 180) {
+		    printCounter = 0;
+		    printf("FusedPitch=%.1f°, Δ=%.1f°, GyroY=%.1f°/s, State=%d\n",
+		           fused, delta, avgGyro, state);
+		}
+
+    }
+}
+
+

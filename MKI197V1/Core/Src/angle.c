@@ -7,12 +7,12 @@
 static float pitchOffset = 0.0f;       // zur Kalibrierung
 static float smoothedPitch = 0.0f;     // Für Tiefpass
 
-// Initialisierung für Kalibrierung (optional aufrufen)
+
 void Set_PitchOffset(float offset) {
     pitchOffset = offset;
 }
 
-// Gibt den gefilterten Pitch-Winkel zurück
+
 float Calculate_Pitch(int16_t ax, int16_t ay, int16_t az) {
     float fx = (float)ax;
     float fy = (float)ay;

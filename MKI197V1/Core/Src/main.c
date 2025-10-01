@@ -21,7 +21,10 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "bmi2.h"
+#include "mis2dh.h"
 #include "lsm6dsox.h"
+#include "bmi270.h"
 #include "pitch_utils.h"
 #include "angle.h"
 #include "motion_analysis.h"
@@ -29,6 +32,7 @@
 #include "calibratebasepitch.h"
 #include "gyro_calibration.h"
 #include <stdio.h>
+#include <string.h>
 
 
 /* USER CODE END Includes */
@@ -53,12 +57,14 @@
 COM_InitTypeDef BspCOMInit;
 
 I2C_HandleTypeDef hi2c2;
+I2C_HandleTypeDef hi2c3;
+I2C_HandleTypeDef hi2c4;
 
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
-
+// Globale Variablen für BMI270
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -69,6 +75,8 @@ static void MX_ICACHE_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART3_UART_Init(void);
+static void MX_I2C4_Init(void);
+static void MX_I2C3_Init(void);
 /* USER CODE BEGIN PFP */
 #define DEMCR *((volatile uint32_t*) 0xE000EDFCu)
 #define ITM_TCR     (*(volatile uint32_t*)0xE0000E80)
@@ -85,6 +93,9 @@ void Enable_ITM_Trace(void) {
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+
+
+// function to get the Address of the pin I2C
 void scan_i2c_bus(I2C_HandleTypeDef *hi2c) {
     printf("Scanning I2C bus...\r\n");
     for (uint8_t addr = 0; addr < 128; addr++) {
@@ -93,6 +104,44 @@ void scan_i2c_bus(I2C_HandleTypeDef *hi2c) {
         }
     }
 }
+
+
+
+
+// for mis2dh
+// --- simple mg scaling for MIS2DH HR mode (typical sensitivities) ---
+static float mis2dh_lsb_to_mg(int16_t raw, mis2dh_fs_t fs) {
+    float mg_per_lsb = 1.0f; // ±2g
+    switch (fs) {
+        case MIS2DH_FS_2G:  mg_per_lsb = 1.0f;  break;
+        case MIS2DH_FS_4G:  mg_per_lsb = 2.0f;  break;
+        case MIS2DH_FS_8G:  mg_per_lsb = 4.0f;  break;
+        case MIS2DH_FS_16G: mg_per_lsb = 12.0f; break;
+    }
+    return raw * mg_per_lsb;
+}
+
+
+
+
+
+
+// --- Mini I2C-Scanner --------------------------
+static void I2C_Scan(I2C_HandleTypeDef *hi2c)
+{
+    printf("\r\n[I2C] Scanning bus...\r\n");
+
+    for (uint8_t addr7 = 0x03; addr7 < 0x78; addr7++) {
+        uint16_t addr8 = addr7 << 1;  // HAL erwartet 8-bit-Adresse
+        if (HAL_I2C_IsDeviceReady(hi2c, addr8, 2, 10) == HAL_OK) {
+            printf("  -> Found device at 7-bit 0x%02X (8-bit 0x%02X)\r\n", addr7, addr8);
+        }
+    }
+
+    printf("[I2C] Scan done.\r\n");
+}
+// -----------------------------------------------
+
 
 // für UART Ausgabe
 //int _write(int file, char *ptr, int len)
@@ -153,6 +202,8 @@ int main(void)
   MX_I2C2_Init();
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
+  MX_I2C4_Init();
+  MX_I2C3_Init();
   /* USER CODE BEGIN 2 */
   //Enable_ITM_Trace();
   // <--- WICHTIG!
@@ -181,22 +232,85 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
+
+
   HAL_Delay(10);
+  /* für Sensor MKI197V1*/
   LSM6DSOX_Init(&hi2c2);
+
+
+
+
+  // sensor mis2dh
+
+
+//  uint16_t mis2dh_addr = MIS2DH_SA0_LOW_ADDR; // or MIS2DH_SA0_LOW_ADDR
+//  HAL_Delay(10);
+//
+//  if (!MIS2DH_Init(&hi2c3, mis2dh_addr, MIS2DH_ODR_100HZ, MIS2DH_FS_2G, false)) {
+//      printf("MIS2DH init failed\r\n");
+//      I2C_Scan(&hi2c3);
+//      Error_Handler();
+//  }
+//  printf("MIS2DH ready\r\n");
+//
+//  int16_t ax, ay, az;               // declare ONCE
+//  const mis2dh_fs_t fs = MIS2DH_FS_2G;
+
+
+
+
+
+
+
+
+// Sensor bmi270
+  /* BMI270 Init (I2C4) */
+//  if (HAL_I2C_IsDeviceReady(&hi2c4, BMI270_I2C_ADDR, 2, 100) != HAL_OK) {
+//      printf("BMI270 not responding at 0x%02X\r\n", BMI270_I2C_ADDR >> 1);
+//      Error_Handler();
+//  }
+//  if (!BMI270_Init(&hi2c4)) {
+//      printf("BMI270 init failed!\r\n");
+//      Error_Handler();
+//  }
+
+//  bmi2_set_command_register(BMI2_FIFO_FLUSH_CMD, BMI270_GetDev());
+
+
   HAL_Delay(30); // FIFO mit ersten Samples füllen
+
   float base_pitch = CalibrateBasePitch(&hi2c2);
   float gyroBias = CalibrateGyroBias(&hi2c2);
+
 
   //float base_pitch = Get_Base_Pitch(&hi2c2);
   printf("Basiswinkel=%.2f°, GyroBias=%.2f°/s\n", base_pitch, gyroBias);
 
   while (1)
   {
-	  	// giving time for FIFO to Fill
-	    //HAL_Delay(100);
+
+
+	    // für Sensor MKI197V1
 	    Motion_Process_Improved(&hi2c2, base_pitch, gyroBias, HAL_GetTick());
-	    //UART_Comm_Process(&huart3);
-	    //HAL_Delay(2);
+	    //I2C_Scan(&hi2c2);
+
+	    // für Sensor BMI270
+	  //Motion_Process_270(&hi2c4, base_pitch, gyroBias, HAL_GetTick());
+
+	  // für MIS2dh sensor
+//      if (mis2dh_readxyz(&hi2c3, mis2dh_addr, &ax, &ay, &az) == hal_ok) {
+//          // raw lsbs
+//          printf("mis2dh raw:  x=%d  y=%d  z=%d\r\n", ax, ay, az);
+//
+//          float xmg = mis2dh_lsb_to_mg(ax, fs);
+//          float ymg = mis2dh_lsb_to_mg(ay, fs);
+//          float zmg = mis2dh_lsb_to_mg(az, fs);
+//          printf("mis2dh [mg]: x=%.1f  y=%.1f  z=%.1f\r\n", xmg, ymg, zmg);
+//      }
+//      hal_delay(100); // ~10 hz prints
+
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -264,6 +378,7 @@ void SystemClock_Config(void)
   */
 static void SystemPower_Config(void)
 {
+  HAL_PWREx_EnableVddIO2();
 
   /*
    * Disable the internal Pull-Up in Dead Battery pins of UCPD peripheral
@@ -278,6 +393,8 @@ static void SystemPower_Config(void)
     Error_Handler();
   }
 /* USER CODE BEGIN PWR */
+
+
 /* USER CODE END PWR */
 }
 
@@ -326,6 +443,102 @@ static void MX_I2C2_Init(void)
   /* USER CODE BEGIN I2C2_Init 2 */
 
   /* USER CODE END I2C2_Init 2 */
+
+}
+
+/**
+  * @brief I2C3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C3_Init(void)
+{
+
+  /* USER CODE BEGIN I2C3_Init 0 */
+
+  /* USER CODE END I2C3_Init 0 */
+
+  /* USER CODE BEGIN I2C3_Init 1 */
+
+  /* USER CODE END I2C3_Init 1 */
+  hi2c3.Instance = I2C3;
+  hi2c3.Init.Timing = 0x00F07BFF;
+  hi2c3.Init.OwnAddress1 = 0;
+  hi2c3.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c3.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c3.Init.OwnAddress2 = 0;
+  hi2c3.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c3.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c3.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c3, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c3, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C3_Init 2 */
+
+  /* USER CODE END I2C3_Init 2 */
+
+}
+
+/**
+  * @brief I2C4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C4_Init(void)
+{
+
+  /* USER CODE BEGIN I2C4_Init 0 */
+
+  /* USER CODE END I2C4_Init 0 */
+
+  /* USER CODE BEGIN I2C4_Init 1 */
+
+  /* USER CODE END I2C4_Init 1 */
+  hi2c4.Instance = I2C4;
+  hi2c4.Init.Timing = 0x00F07BFF;
+  hi2c4.Init.OwnAddress1 = 0;
+  hi2c4.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c4.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c4.Init.OwnAddress2 = 0;
+  hi2c4.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c4.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c4.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c4, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c4, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C4_Init 2 */
+
+  /* USER CODE END I2C4_Init 2 */
 
 }
 
@@ -473,6 +686,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOG_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */

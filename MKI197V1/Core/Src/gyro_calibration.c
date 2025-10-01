@@ -1,3 +1,9 @@
+/**
+ * @brief  Kalibriert den Basis Gyro im Ruhezustand.
+ * @param  hi2c Zeiger auf einen initialisierten I2C-Handle
+ * @return Gemittelter Basis G<ro in Grad
+ */
+
 #include "lsm6dsox.h"
 #include "stm32u5xx_hal.h"
 #include "gyro_calibration.h"

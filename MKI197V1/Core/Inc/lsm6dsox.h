@@ -5,7 +5,7 @@
 #include <stdbool.h>
 
 
-#define LSM6DSOX_I2C_ADDR            (0x6A << 1)
+#define LSM6DSOX_I2C_ADDR            (0x6B << 1)
 
 /* Register map (partial) */
 #define LSM6DSOX_REG_WHO_AM_I        0x0F

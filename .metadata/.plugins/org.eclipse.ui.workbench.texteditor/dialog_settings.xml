@@ -3,15 +3,20 @@
 	<item key="hasShownOverlayPopupBefore" value="true"/>
 	<item key="replaceBarOpen" value="false"/>
 	<list key="searchhistory">
-		<item value="huart2"/>
-		<item value="0x7C"/>
-		<item value="data = 0x70;"/>
-		<item value="data = 0x70; "/>
-		<item value="data = (0x08 &lt;&lt; 4) | 0x08;"/>
-		<item value="0x09"/>
-		<item value="0x9"/>
-		<item value="LSM6DSOX_GetFIFOLength"/>
-		<item value="Get_Base_Pitch"/>
-		<item value="Watermark"/>
+		<item value="HAL_GPIO_TogglePin"/>
+		<item value="pin"/>
+		<item value="HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_6);"/>
+		<item value="fifo_wm_flag"/>
+		<item value="MX_GPIO_Init"/>
+		<item value="MIS2DH_ADDR"/>
+		<item value="bmi2_sensor_enable"/>
+		<item value="Length"/>
+		<item value="bmi270_maximum_fifo"/>
+		<item value="HAL_Init"/>
+		<item value="bmi270_board_init"/>
+		<item value="bmi270_init_i2c"/>
+		<item value="static"/>
+		<item value="bmi270_maximum_fifo_init"/>
+		<item value="bmi2_stm32_i2c_ctx"/>
 	</list>
 </section>

@@ -1,17 +1,22 @@
-16:14:19 **** Incremental Build of configuration Debug for project MKI197V1 ****
+14:23:14 **** Incremental Build of configuration Debug for project MKI197V1 ****
 make -j12 all 
 arm-none-eabi-gcc "../Core/Src/complementary_filter.c" -mcpu=cortex-m33 -std=gnu11 -g -DDEBUG -DUSE_NUCLEO_64 -DUSE_HAL_DRIVER -DSTM32U575xx -c -I../Core/Inc -I../Drivers/STM32U5xx_HAL_Driver/Inc -I../Drivers/STM32U5xx_HAL_Driver/Inc/Legacy -I../Drivers/BSP/STM32U5xx_Nucleo -I../Drivers/CMSIS/Device/ST/STM32U5xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/complementary_filter.d" -MT"Core/Src/complementary_filter.o" --specs=nano.specs -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/complementary_filter.o"
+arm-none-eabi-gcc "../Core/Src/motion_analysis.c" -mcpu=cortex-m33 -std=gnu11 -g -DDEBUG -DUSE_NUCLEO_64 -DUSE_HAL_DRIVER -DSTM32U575xx -c -I../Core/Inc -I../Drivers/STM32U5xx_HAL_Driver/Inc -I../Drivers/STM32U5xx_HAL_Driver/Inc/Legacy -I../Drivers/BSP/STM32U5xx_Nucleo -I../Drivers/CMSIS/Device/ST/STM32U5xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/motion_analysis.d" -MT"Core/Src/motion_analysis.o" --specs=nano.specs -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/motion_analysis.o"
+../Core/Src/motion_analysis.c: In function 'Motion_Process_Improved':
+../Core/Src/motion_analysis.c:108:29: warning: variable 'newState' set but not used [-Wunused-but-set-variable]
+  108 |                 MotionState newState = IDLE;
+      |                             ^~~~~~~~
 arm-none-eabi-gcc -o "MKI197V1.elf" @"objects.list"   -mcpu=cortex-m33 -T"C:\localcheckouts\BA\accelerometer\MKI197V1\STM32U575ZITXQ_FLASH.ld" --specs=nosys.specs -Wl,-Map="MKI197V1.map" -Wl,--gc-sections -static -u _printf_float --specs=nano.specs -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 Finished building target: MKI197V1.elf
  
 arm-none-eabi-size  MKI197V1.elf 
 arm-none-eabi-objdump -h -S MKI197V1.elf  > "MKI197V1.list"
    text	   data	    bss	    dec	    hex	filename
-  50176	    496	   4368	  55040	   d700	MKI197V1.elf
+  50688	    496	   4536	  55720	   d9a8	MKI197V1.elf
 Finished building: default.size.stdout
  
 Finished building: MKI197V1.list
  
 
-16:14:20 Build Finished. 0 errors, 0 warnings. (took 1s.202ms)
+14:23:15 Build Finished. 0 errors, 1 warnings. (took 951ms)
 

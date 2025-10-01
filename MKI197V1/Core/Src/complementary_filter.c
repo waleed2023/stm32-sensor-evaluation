@@ -2,12 +2,10 @@
 #include <math.h>
 #include "stm32u5xx_nucleo.h"
 
-// Gewichtungsfaktor für Gyro vs. Accelerometer (zwischen 0 und 1)
 #ifndef ALPHA
 #define ALPHA 0.96f
 #endif
 
-// Interner Zustand für den gefilterten Pitch-Winkel
 static float fusedPitch = 0.0f;
 
 void ComplementaryFilter_Init(float accelPitch) {
@@ -16,9 +14,6 @@ void ComplementaryFilter_Init(float accelPitch) {
 
 float ComplementaryFilter_Update(float accelPitch, float gyroYdps, float dt) {
     float gyroComponent = fusedPitch + gyroYdps * dt;
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_3);
     fusedPitch = ALPHA * gyroComponent + (1.0f - ALPHA) * accelPitch;
-    //fusedPitch = gyroComponent;
-
     return fusedPitch;
 }

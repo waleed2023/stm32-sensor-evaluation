@@ -1,0 +1,362 @@
+//// bmi270.c
+//#include "bmi270.h"
+//#include "bmi2.h"
+//#include "bmi270_maximum_fifo.h"
+//#include <string.h>
+//#include <stdio.h>
+//#include <stdbool.h>
+//
+///* HAL <-> BMI2 Adapter */
+//static BMI2_INTF_RETURN_TYPE bmi2_hal_read(uint8_t reg, uint8_t *data, uint32_t len, void *intf_ptr)
+//{
+//    I2C_HandleTypeDef *hi2c = (I2C_HandleTypeDef*)intf_ptr;
+//    return (HAL_I2C_Mem_Read(hi2c, BMI270_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT, data, len, HAL_MAX_DELAY) == HAL_OK)
+//           ? BMI2_OK : BMI2_E_COM_FAIL;
+//}
+//static BMI2_INTF_RETURN_TYPE bmi2_hal_write(uint8_t reg, const uint8_t *data, uint32_t len, void *intf_ptr)
+//{
+//    I2C_HandleTypeDef *hi2c = (I2C_HandleTypeDef*)intf_ptr;
+//    return (HAL_I2C_Mem_Write(hi2c, BMI270_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT, (uint8_t*)data, len, HAL_MAX_DELAY) == HAL_OK)
+//           ? BMI2_OK : BMI2_E_COM_FAIL;
+//}
+//static void bmi2_hal_delay_us(uint32_t period, void *intf_ptr)
+//{
+//    (void)intf_ptr;
+//    HAL_Delay((period + 999U) / 1000U); // µs→ms runden
+//}
+//
+///* Vollständiges Init */
+//bool BMI270_Init(I2C_HandleTypeDef *hi2c)
+//{
+//    /* 0) WHO_AM_I prüfen (0x24) */
+//    uint8_t who = 0;
+//    if (HAL_I2C_Mem_Read(hi2c, BMI270_I2C_ADDR, BMI270_REG_CHIP_ID, I2C_MEMADD_SIZE_8BIT, &who, 1, HAL_MAX_DELAY) != HAL_OK)
+//        return false;
+//    if (who != 0x24) return false;
+//
+//    /* 1) BMI2-Device struct + Blob-Init (lädt Config korrekt) */
+//    struct bmi2_dev dev;
+//    memset(&dev, 0, sizeof(dev));
+//    dev.intf     = BMI2_I2C_INTF;
+//    dev.read     = bmi2_hal_read;
+//    dev.write    = bmi2_hal_write;
+//    dev.delay_us = bmi2_hal_delay_us;
+//    dev.intf_ptr = hi2c;
+//
+//    /* Lädt die Konfig-Datei und setzt interne Offsets/Pages */
+//    if (bmi270_maximum_fifo_init(&dev) != BMI2_OK)    // aus bmi270_maximum_fifo.c
+//        return false;                                  // (ruft intern bmi2_sec_init) :contentReference[oaicite:1]{index=1}
+//
+//    /* 2) Advanced Power Save AUS (stabil für Stream) */
+//    uint8_t v = 0x00;
+//    if (HAL_I2C_Mem_Write(hi2c, BMI270_I2C_ADDR, BMI270_REG_PWR_CONF, I2C_MEMADD_SIZE_8BIT, &v, 1, HAL_MAX_DELAY) != HAL_OK)
+//        return false;
+//    HAL_Delay(2);
+//
+//    /* 3) Alles AUS, dann ODR/Range programmieren */
+//    v = 0x00; // TEMP|ACC|GYR aus
+//    if (HAL_I2C_Mem_Write(hi2c, BMI270_I2C_ADDR, BMI270_REG_PWR_CTRL, I2C_MEMADD_SIZE_8BIT, &v, 1, HAL_MAX_DELAY) != HAL_OK)
+//        return false;
+//    HAL_Delay(2);
+//
+//    /* Acc 1600 Hz, ±2g ; Gyro 1600 Hz, ±2000 dps (wie zuvor) */
+//    v = 0xA8; if (HAL_I2C_Mem_Write(hi2c, BMI270_I2C_ADDR, BMI270_REG_ACC_CONF,  I2C_MEMADD_SIZE_8BIT, &v, 1, HAL_MAX_DELAY) != HAL_OK) return false;
+//    v = 0x00; if (HAL_I2C_Mem_Write(hi2c, BMI270_I2C_ADDR, BMI270_REG_ACC_RANGE, I2C_MEMADD_SIZE_8BIT, &v, 1, HAL_MAX_DELAY) != HAL_OK) return false;
+//    v = 0xA9; if (HAL_I2C_Mem_Write(hi2c, BMI270_I2C_ADDR, BMI270_REG_GYR_CONF,  I2C_MEMADD_SIZE_8BIT, &v, 1, HAL_MAX_DELAY) != HAL_OK) return false;
+//    v = 0x00; if (HAL_I2C_Mem_Write(hi2c, BMI270_I2C_ADDR, BMI270_REG_GYR_RANGE, I2C_MEMADD_SIZE_8BIT, &v, 1, HAL_MAX_DELAY) != HAL_OK) return false;
+//
+//    /* 4) Jetzt einschalten: TEMP|ACC|GYR */
+//    v = 0x0E;
+//    if (HAL_I2C_Mem_Write(hi2c, BMI270_I2C_ADDR, BMI270_REG_PWR_CTRL, I2C_MEMADD_SIZE_8BIT, &v, 1, HAL_MAX_DELAY) != HAL_OK)
+//        return false;
+//    HAL_Delay(15);
+//
+//    /* 5) FIFO: Header + ACC+GYR, Watermark 8 B */
+//    v = 0x00; if (HAL_I2C_Mem_Write(hi2c, BMI270_I2C_ADDR, BMI270_REG_FIFO_CFG_0, I2C_MEMADD_SIZE_8BIT, &v, 1, HAL_MAX_DELAY) != HAL_OK) return false;
+//    v = (uint8_t)(0x80 | 0x40 | 0x0C); // EN|HEADER|ACC|GYR
+//    if (HAL_I2C_Mem_Write(hi2c, BMI270_I2C_ADDR, BMI270_REG_FIFO_CFG_1, I2C_MEMADD_SIZE_8BIT, &v, 1, HAL_MAX_DELAY) != HAL_OK)
+//        return false;
+//    v = 8;    if (HAL_I2C_Mem_Write(hi2c, BMI270_I2C_ADDR, BMI270_REG_FIFO_WTM_0, I2C_MEMADD_SIZE_8BIT, &v, 1, HAL_MAX_DELAY) != HAL_OK) return false;
+//    v = 0x00; if (HAL_I2C_Mem_Write(hi2c, BMI270_I2C_ADDR, BMI270_REG_FIFO_WTM_1, I2C_MEMADD_SIZE_8BIT, &v, 1, HAL_MAX_DELAY) != HAL_OK) return false;
+//
+//    /* 6) Mini-Self-Check: SENSOR_TIME muss steigen */
+//    uint8_t st[3]; uint32_t t0, t1;
+//    if (HAL_I2C_Mem_Read(hi2c, BMI270_I2C_ADDR, 0x18, I2C_MEMADD_SIZE_8BIT, st, 3, HAL_MAX_DELAY) != HAL_OK) return false;
+//    t0 = (uint32_t)st[0] | ((uint32_t)st[1] << 8) | ((uint32_t)st[2] << 16);
+//    HAL_Delay(10);
+//    if (HAL_I2C_Mem_Read(hi2c, BMI270_I2C_ADDR, 0x18, I2C_MEMADD_SIZE_8BIT, st, 3, HAL_MAX_DELAY) != HAL_OK) return false;
+//    t1 = (uint32_t)st[0] | ((uint32_t)st[1] << 8) | ((uint32_t)st[2] << 16);
+//
+//    return (t1 != t0); // nur „true“, wenn der Sensor „tickt“
+//}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// bmi270.c — minimal, API-only driver glue for BMI270 (I²C + FIFO header mode)
+//
+// What this file does:
+//  - Adapts STM32 HAL I2C to Bosch BMI2 API callbacks
+//  - Initializes BMI270 using Bosch config file (maximum FIFO variant provided in project)
+//  - Enables ACC+GYR, sets simple ODR/RANGE/BW
+//  - Enables FIFO (header mode) for ACC+GYR (+ sensortime) with a watermark
+//  - Provides a simple FIFO read+extract helper
+//
+// No direct register pokes are used for configuration; everything goes through the Bosch API.
+// Keep this file small and readable. If you need more features, add small helpers below.
+
+#include <string.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include "bmi2.h"
+#include "bmi270.h"
+#include "bmi270_maximum_fifo.h"  // provides bmi270_maximum_fifo_config_file[]
+
+// Bring in your HAL declarations.
+// Adjust include to your project (one of these typically exists):
+#include "main.h"     // for I2C_HandleTypeDef
+//#include "i2c.h"
+
+// -----------------------------
+// Local glue context
+// -----------------------------
+typedef struct {
+    I2C_HandleTypeDef *hi2c;
+    uint16_t addr;               // 7-bit addr left-shifted by 1 for HAL (0x68<<1 or 0x69<<1)
+} bmi2_hal_i2c_ctx_t;
+
+static struct bmi2_dev g_dev;            // Bosch device descriptor
+static bmi2_hal_i2c_ctx_t g_i2c_ctx;     // stores HAL handle + I2C address
+
+// Expose a getter if other modules need the Bosch dev pointer
+struct bmi2_dev *BMI270_GetDev(void) { return (g_dev.intf_ptr != NULL) ? &g_dev : NULL; }
+
+// -----------------------------
+// HAL <-> BMI2 callback adapters
+// -----------------------------
+static BMI2_INTF_RETURN_TYPE bmi2_hal_read(uint8_t reg, uint8_t *data, uint32_t len, void *intf_ptr)
+{
+    const bmi2_hal_i2c_ctx_t *ctx = (const bmi2_hal_i2c_ctx_t*)intf_ptr;
+    if (!ctx || !ctx->hi2c) return BMI2_E_COM_FAIL;
+    if (HAL_I2C_Mem_Read(ctx->hi2c, ctx->addr, reg, I2C_MEMADD_SIZE_8BIT, data, (uint16_t)len, 100) == HAL_OK)
+        return BMI2_INTF_RET_SUCCESS;
+    return BMI2_E_COM_FAIL;
+}
+
+static BMI2_INTF_RETURN_TYPE bmi2_hal_write(uint8_t reg, const uint8_t *data, uint32_t len, void *intf_ptr)
+{
+    const bmi2_hal_i2c_ctx_t *ctx = (const bmi2_hal_i2c_ctx_t*)intf_ptr;
+    if (!ctx || !ctx->hi2c) return BMI2_E_COM_FAIL;
+    if (HAL_I2C_Mem_Write(ctx->hi2c, ctx->addr, reg, I2C_MEMADD_SIZE_8BIT, (uint8_t*)data, (uint16_t)len, 100) == HAL_OK)
+        return BMI2_INTF_RET_SUCCESS;
+    return BMI2_E_COM_FAIL;
+}
+
+static void bmi2_hal_delay_us(uint32_t period, void *intf_ptr)
+{
+    (void)intf_ptr;
+    // If you have a microsecond timer, use it. Otherwise round up to ms.
+    uint32_t ms = (period + 999U) / 1000U;
+    HAL_Delay(ms);
+}
+
+// Optional: quick probe to find 0x68/0x69
+static bool probe_who_am_i(I2C_HandleTypeDef *hi2c, uint16_t addr_lsl1, uint8_t *out_id)
+{
+    uint8_t id = 0;
+    if (HAL_I2C_Mem_Read(hi2c, addr_lsl1, BMI2_CHIP_ID_ADDR, I2C_MEMADD_SIZE_8BIT, &id, 1, 50) == HAL_OK) {
+        if (out_id) *out_id = id;
+        return true;
+    }
+    return false;
+}
+
+// -----------------------------
+// Public: minimal init
+// -----------------------------
+// Returns BMI2_OK on success. After success, ACC+GYR stream to FIFO in header mode.
+int8_t BMI270_Init(I2C_HandleTypeDef *hi2c)
+{
+    if (!hi2c) return BMI2_E_NULL_PTR;
+
+    // 1) Detect I2C address (0x68 or 0x69)
+    uint8_t id = 0;
+    uint16_t addr = (BMI2_I2C_PRIM_ADDR << 1);         // 0x68 << 1
+    if (!probe_who_am_i(hi2c, addr, &id)) {
+        uint16_t alt = (BMI2_I2C_SEC_ADDR << 1);       // 0x69 << 1
+        if (!probe_who_am_i(hi2c, alt, &id)) return BMI2_E_COM_FAIL;
+        addr = alt;
+    }
+
+    // 2) Link callbacks
+    memset(&g_dev, 0, sizeof(g_dev));
+    memset(&g_i2c_ctx, 0, sizeof(g_i2c_ctx));
+    g_i2c_ctx.hi2c = hi2c;
+    g_i2c_ctx.addr = addr;
+
+    g_dev.intf      = BMI2_I2C_INTF;
+    g_dev.intf_ptr  = &g_i2c_ctx;
+    g_dev.read      = bmi2_hal_read;
+    g_dev.write     = bmi2_hal_write;
+    g_dev.delay_us  = bmi2_hal_delay_us;
+
+    // 3) Point to the provided config file (maximum FIFO variant in this project)
+    g_dev.config_file_ptr = bmi270_maximum_fifo_config_file;
+
+    // 4) Use Bosch helper that soft-resets, checks chip-id and loads config
+    //    (This function comes with the Bosch examples for the maximum FIFO build.)
+    int8_t rslt = bmi270_maximum_fifo_init(&g_dev);
+    if (rslt != BMI2_OK) return rslt;
+
+    // 5) Disable Advance Power Save while configuring (API toggles delays accordingly)
+    rslt = bmi2_set_adv_power_save(BMI2_DISABLE, &g_dev); if (rslt != BMI2_OK) return rslt;
+
+    // 6) Configure ACC + GYR (very standard, conservative)
+    struct bmi2_sens_config cfg[2];
+
+    cfg[0].type = BMI2_ACCEL;
+    rslt = bmi2_get_sensor_config(&cfg[0], 1, &g_dev); if (rslt != BMI2_OK) return rslt;
+    cfg[0].cfg.acc.odr         = BMI2_ACC_ODR_200HZ;
+    cfg[0].cfg.acc.bwp         = BMI2_ACC_NORMAL_AVG4;
+    cfg[0].cfg.acc.filter_perf = BMI2_PERF_OPT_MODE;      // filtered
+    cfg[0].cfg.acc.range       = BMI2_ACC_RANGE_2G;
+
+    cfg[1].type = BMI2_GYRO;
+    rslt = bmi2_get_sensor_config(&cfg[1], 1, &g_dev); if (rslt != BMI2_OK) return rslt;
+    cfg[1].cfg.gyr.odr         = BMI2_GYR_ODR_200HZ;
+    cfg[1].cfg.gyr.bwp         = BMI2_GYR_NORMAL_MODE;
+    cfg[1].cfg.gyr.noise_perf  = BMI2_GYR_PERF_MODE;      // high-perf noise
+    cfg[1].cfg.gyr.filter_perf = BMI2_PERF_OPT_MODE;      // filtered
+    cfg[1].cfg.gyr.range       = BMI2_GYR_RANGE_2000;
+
+    rslt = bmi2_set_sensor_config(cfg, 2, &g_dev); if (rslt != BMI2_OK) return rslt;
+
+    // 7) Enable sensors
+    uint8_t sens_list[2] = { BMI2_ACCEL, BMI2_GYRO };
+    rslt = bmi2_sensor_enable(sens_list, 2, &g_dev); if (rslt != BMI2_OK) return rslt;
+
+    // 8) FIFO: header + ACC + GYR + sensortime
+    uint16_t fifo_conf = (uint16_t)(BMI2_FIFO_HEADER_EN | BMI2_FIFO_ACC_EN | BMI2_FIFO_GYR_EN | BMI2_FIFO_TIME_EN);
+    rslt = bmi2_set_fifo_config(fifo_conf, BMI2_ENABLE, &g_dev); if (rslt != BMI2_OK) return rslt;
+
+    // Optional (recommended): enable filtered data in FIFO (acc & gyr) and set downsampling = 1x
+    struct bmi2_fifo_downs d = { 0 };
+    d.acc_fifo_downs = 0; // no downsample
+    d.gyr_fifo_downs = 0;
+    rslt = bmi2_set_fifo_down_sample(&d, &g_dev); if (rslt != BMI2_OK) return rslt;
+
+    struct bmi2_fifo_filter filt = { 0 };
+    filt.acc_filter = BMI2_FIFO_FILTERED_DATA;
+    filt.gyr_filter = BMI2_FIFO_FILTERED_DATA;
+    rslt = bmi2_set_fifo_filter_data(&filt, &g_dev); if (rslt != BMI2_OK) return rslt;
+
+    // 9) Watermark: choose something safe (multiple of frame length; here ~ 30 frames)
+    // Each ACC+GYR frame = 12 bytes (+ headers, + optional sensortime frame occasionally).
+    // 360 bytes is a practical WM for 512-byte FIFO.
+    rslt = bmi2_set_fifo_wm(360, &g_dev); if (rslt != BMI2_OK) return rslt;
+
+    // 10) Flush FIFO once so we start fresh
+    (void)bmi2_set_command_register(BMI2_FIFO_FLUSH_CMD, &g_dev);
+
+    // (Optional) Re-enable APS now that config is done
+    (void)bmi2_set_adv_power_save(BMI2_ENABLE, &g_dev);
+
+    return BMI2_OK;
+}
+
+// -----------------------------
+// Public: read + extract helper
+// -----------------------------
+// Call this regularly. Provide buffers large enough for your maximum frames.
+// Typical usage:
+//   struct bmi2_sens_axes_data acc[32], gyr[32];
+//   uint8_t fifo_buf[512];
+//   uint16_t acc_len = 32, gyr_len = 32;
+//   BMI270_ReadFifo(acc, &acc_len, gyr, &gyr_len, fifo_buf, sizeof(fifo_buf));
+// After return, acc_len/gyr_len hold the number of frames extracted (can be 0+).
+int8_t BMI270_ReadFifo(struct bmi2_sens_axes_data *acc,
+                       uint16_t *acc_len,
+                       struct bmi2_sens_axes_data *gyr,
+                       uint16_t *gyr_len,
+                       uint8_t *fifo_buf,
+                       uint16_t fifo_buf_size)
+{
+    if (!acc || !acc_len || !gyr || !gyr_len || !fifo_buf || fifo_buf_size == 0) return BMI2_E_NULL_PTR;
+    struct bmi2_dev *dev = BMI270_GetDev();
+    if (!dev) return BMI2_E_NULL_PTR;
+
+    struct bmi2_fifo_frame fifo = {0};
+    fifo.data          = fifo_buf;
+    fifo.length        = fifo_buf_size;          // how many bytes to read from FIFO
+    fifo.header_enable = 1;                      // we enabled HEADER_EN above
+
+    int8_t rslt = bmi2_read_fifo_data(&fifo, dev);
+    if (rslt != BMI2_OK && rslt != BMI2_W_PARTIAL_READ) {
+        // If FIFO empty, caller may just ignore and call later.
+        *acc_len = 0; *gyr_len = 0;
+        return rslt;
+    }
+
+    // Extract up to *acc_len / *gyr_len frames (caller decides capacity)
+    if (bmi2_extract_accel(acc, acc_len, &fifo, dev) != BMI2_OK) *acc_len = 0;
+    if (bmi2_extract_gyro (gyr, gyr_len, &fifo, dev) != BMI2_OK) *gyr_len = 0;
+
+    return BMI2_OK;
+}
+
+// -----------------------------
+// Tiny debug helpers (optional)
+// -----------------------------
+uint16_t BMI270_ReadFifoConfigMask(void)
+{
+    uint16_t m = 0; (void)bmi2_get_fifo_config(&m, &g_dev); return m;
+}
+
+int8_t BMI270_DumpOnce(uint16_t *out_fifo_len, uint8_t *out_header, uint16_t *out_data_enable)
+{
+    if (!out_fifo_len || !out_header || !out_data_enable) return BMI2_E_NULL_PTR;
+
+    uint8_t cnt[2] = {0};
+    int8_t rslt = bmi2_get_regs(BMI2_FIFO_LENGTH_0_ADDR, cnt, 2, &g_dev);
+    if (rslt != BMI2_OK) return rslt;
+    *out_fifo_len = (uint16_t)(cnt[0] | ((cnt[1] & 0x3F) << 8));
+
+    uint8_t conf[2] = {0};
+    rslt = bmi2_get_regs(BMI2_FIFO_CONFIG_0_ADDR, conf, 2, &g_dev);
+    if (rslt != BMI2_OK) return rslt;
+    *out_header = (uint8_t)(conf[1] & (BMI2_FIFO_HEADER_EN >> 8));
+    *out_data_enable = (uint16_t)(((uint16_t)conf[0]) | ((uint16_t)conf[1] << 8));
+    return BMI2_OK;
+}
+
+// -----------------------------
+// END
+// -----------------------------
+
+

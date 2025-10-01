@@ -6,8 +6,15 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+// Sensor MKI197VI
 void Motion_Process_Improved(I2C_HandleTypeDef *hi2c,
+							float basePitch,
+                            float gyroBias,
+                            uint32_t timestamp_ms);
+
+
+// Sensor 270
+void Motion_Process_270(I2C_HandleTypeDef *hi2c,
 							float basePitch,
                             float gyroBias,
                             uint32_t timestamp_ms);
