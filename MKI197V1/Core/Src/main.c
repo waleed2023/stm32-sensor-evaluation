@@ -21,7 +21,20 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "bmi2.h"
+#include "mis2dh.h"
 #include "lsm6dsox.h"
+#include "bmi270.h"
+#include "pitch_utils.h"
+#include "angle.h"
+#include "motion_analysis.h"
+#include "uart_comm.h"
+#include "calibratebasepitch.h"
+#include "gyro_calibration.h"
+#include <stdio.h>
+#include <string.h>
+
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,11 +57,14 @@
 COM_InitTypeDef BspCOMInit;
 
 I2C_HandleTypeDef hi2c2;
+I2C_HandleTypeDef hi2c3;
+I2C_HandleTypeDef hi2c4;
 
 UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
-
+// Globale Variablen für BMI270
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -58,8 +74,10 @@ static void MX_GPIO_Init(void);
 static void MX_ICACHE_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_USART3_UART_Init(void);
+static void MX_I2C4_Init(void);
+static void MX_I2C3_Init(void);
 /* USER CODE BEGIN PFP */
-
 #define DEMCR *((volatile uint32_t*) 0xE000EDFCu)
 #define ITM_TCR     (*(volatile uint32_t*)0xE0000E80)
 #define ITM_TER     (*(volatile uint32_t*)0xE0000E00)
@@ -69,22 +87,82 @@ void Enable_ITM_Trace(void) {
     ITM_TCR |= 1;          // ITM enable
     ITM_TER |= 1;          // Stimulus port 0 enable
 }
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-int _write(int file, char *ptr, int len)
-{
-  for (int i = 0; i < len; i++)
-  {
-    ITM_SendChar((uint32_t)*ptr++);
-  }
-  return len;
+
+
+
+// function to get the Address of the pin I2C
+void scan_i2c_bus(I2C_HandleTypeDef *hi2c) {
+    printf("Scanning I2C bus...\r\n");
+    for (uint8_t addr = 0; addr < 128; addr++) {
+        if (HAL_I2C_IsDeviceReady(hi2c, addr << 1, 1, 10) == HAL_OK) {
+            printf("Found device at 0x%02X\r\n", addr);
+        }
+    }
 }
+
+
+
+
+// for mis2dh
+// --- simple mg scaling for MIS2DH HR mode (typical sensitivities) ---
+static float mis2dh_lsb_to_mg(int16_t raw, mis2dh_fs_t fs) {
+    float mg_per_lsb = 1.0f; // ±2g
+    switch (fs) {
+        case MIS2DH_FS_2G:  mg_per_lsb = 1.0f;  break;
+        case MIS2DH_FS_4G:  mg_per_lsb = 2.0f;  break;
+        case MIS2DH_FS_8G:  mg_per_lsb = 4.0f;  break;
+        case MIS2DH_FS_16G: mg_per_lsb = 12.0f; break;
+    }
+    return raw * mg_per_lsb;
+}
+
+
+
+
+
+
+// --- Mini I2C-Scanner --------------------------
+static void I2C_Scan(I2C_HandleTypeDef *hi2c)
+{
+    printf("\r\n[I2C] Scanning bus...\r\n");
+
+    for (uint8_t addr7 = 0x03; addr7 < 0x78; addr7++) {
+        uint16_t addr8 = addr7 << 1;  // HAL erwartet 8-bit-Adresse
+        if (HAL_I2C_IsDeviceReady(hi2c, addr8, 2, 10) == HAL_OK) {
+            printf("  -> Found device at 7-bit 0x%02X (8-bit 0x%02X)\r\n", addr7, addr8);
+        }
+    }
+
+    printf("[I2C] Scan done.\r\n");
+}
+// -----------------------------------------------
+
+
+// für UART Ausgabe
+//int _write(int file, char *ptr, int len)
+//{
+//  for (int i = 0; i < len; i++)
+//  {
+//    ITM_SendChar((uint32_t)*ptr++);
+//  }
+//  return len;
+//}
+
+
+
+
+
 /* Debug Exception and Monitor Control Register base address */
 /* ITM register addresses */
 #define ITM_STIMULUS_PORT0 *((volatile uint32_t*) 0xE0000000u)
 #define ITM_TRACE_EN *((volatile uint32_t*) 0xE0000E00u)
+/* Send a char through ITM */
+
 
 /* USER CODE END 0 */
 
@@ -123,10 +201,12 @@ int main(void)
   MX_ICACHE_Init();
   MX_I2C2_Init();
   MX_USART2_UART_Init();
+  MX_USART3_UART_Init();
+  MX_I2C4_Init();
+  MX_I2C3_Init();
   /* USER CODE BEGIN 2 */
-  Enable_ITM_Trace();
-  int16_t ax, ay, az;
-  LSM6DSOX_Init(&hi2c2);
+  //Enable_ITM_Trace();
+  // <--- WICHTIG!
 
   /* USER CODE END 2 */
 
@@ -151,19 +231,89 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+
+
+  HAL_Delay(10);
+  /* für Sensor MKI197V1*/
+  LSM6DSOX_Init(&hi2c2);
+
+
+
+
+  // sensor mis2dh
+
+
+//  uint16_t mis2dh_addr = MIS2DH_SA0_LOW_ADDR; // or MIS2DH_SA0_LOW_ADDR
+//  HAL_Delay(10);
+//
+//  if (!MIS2DH_Init(&hi2c3, mis2dh_addr, MIS2DH_ODR_100HZ, MIS2DH_FS_2G, false)) {
+//      printf("MIS2DH init failed\r\n");
+//      I2C_Scan(&hi2c3);
+//      Error_Handler();
+//  }
+//  printf("MIS2DH ready\r\n");
+//
+//  int16_t ax, ay, az;               // declare ONCE
+//  const mis2dh_fs_t fs = MIS2DH_FS_2G;
+
+
+
+
+
+
+
+
+// Sensor bmi270
+  /* BMI270 Init (I2C4) */
+//  if (HAL_I2C_IsDeviceReady(&hi2c4, BMI270_I2C_ADDR, 2, 100) != HAL_OK) {
+//      printf("BMI270 not responding at 0x%02X\r\n", BMI270_I2C_ADDR >> 1);
+//      Error_Handler();
+//  }
+//  if (!BMI270_Init(&hi2c4)) {
+//      printf("BMI270 init failed!\r\n");
+//      Error_Handler();
+//  }
+
+//  bmi2_set_command_register(BMI2_FIFO_FLUSH_CMD, BMI270_GetDev());
+
+
+  HAL_Delay(30); // FIFO mit ersten Samples füllen
+
+  float base_pitch = CalibrateBasePitch(&hi2c2);
+  float gyroBias = CalibrateGyroBias(&hi2c2);
+
+
+  //float base_pitch = Get_Base_Pitch(&hi2c2);
+  printf("Basiswinkel=%.2f°, GyroBias=%.2f°/s\n", base_pitch, gyroBias);
+
   while (1)
   {
+
+
+	    // für Sensor MKI197V1
+	    Motion_Process_Improved(&hi2c2, base_pitch, gyroBias, HAL_GetTick());
+	    //I2C_Scan(&hi2c2);
+
+	    // für Sensor BMI270
+	  //Motion_Process_270(&hi2c4, base_pitch, gyroBias, HAL_GetTick());
+
+	  // für MIS2dh sensor
+//      if (mis2dh_readxyz(&hi2c3, mis2dh_addr, &ax, &ay, &az) == hal_ok) {
+//          // raw lsbs
+//          printf("mis2dh raw:  x=%d  y=%d  z=%d\r\n", ax, ay, az);
+//
+//          float xmg = mis2dh_lsb_to_mg(ax, fs);
+//          float ymg = mis2dh_lsb_to_mg(ay, fs);
+//          float zmg = mis2dh_lsb_to_mg(az, fs);
+//          printf("mis2dh [mg]: x=%.1f  y=%.1f  z=%.1f\r\n", xmg, ymg, zmg);
+//      }
+//      hal_delay(100); // ~10 hz prints
+
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  BSP_LED_On(LED_BLUE);
-//	    if (LSM6DSOX_ReadAccel(&hi2c2, &ax, &ay, &az) == HAL_OK) {
-//	        printf("X: %d, Y: %d, Z: %d\r\n", ax, ay, az);
-//	        BSP_LED_Toggle(LED_GREEN);
-//	    } else {
-//	        printf("I2C Error\r\n");
-//	        BSP_LED_Toggle(LED_RED);
-//	    }
   }
   /* USER CODE END 3 */
 }
@@ -179,17 +329,27 @@ void SystemClock_Config(void)
 
   /** Configure the main internal regulator output voltage
   */
-  if (HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE4) != HAL_OK)
+  if (HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1) != HAL_OK)
   {
     Error_Handler();
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
+  RCC_OscInitStruct.MSIState = RCC_MSI_ON;
+  RCC_OscInitStruct.MSICalibrationValue = RCC_MSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_0;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
+  RCC_OscInitStruct.PLL.PLLMBOOST = RCC_PLLMBOOST_DIV4;
+  RCC_OscInitStruct.PLL.PLLM = 3;
+  RCC_OscInitStruct.PLL.PLLN = 10;
+  RCC_OscInitStruct.PLL.PLLP = 2;
+  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLR = 1;
+  RCC_OscInitStruct.PLL.PLLRGE = RCC_PLLVCIRANGE_1;
+  RCC_OscInitStruct.PLL.PLLFRACN = 0;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -200,13 +360,13 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
                               |RCC_CLOCKTYPE_PCLK3;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV4;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB3CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
   {
     Error_Handler();
   }
@@ -233,6 +393,8 @@ static void SystemPower_Config(void)
     Error_Handler();
   }
 /* USER CODE BEGIN PWR */
+
+
 /* USER CODE END PWR */
 }
 
@@ -252,7 +414,7 @@ static void MX_I2C2_Init(void)
 
   /* USER CODE END I2C2_Init 1 */
   hi2c2.Instance = I2C2;
-  hi2c2.Init.Timing = 0x00000E14;
+  hi2c2.Init.Timing = 0x00F07BFF;
   hi2c2.Init.OwnAddress1 = 0;
   hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -281,6 +443,102 @@ static void MX_I2C2_Init(void)
   /* USER CODE BEGIN I2C2_Init 2 */
 
   /* USER CODE END I2C2_Init 2 */
+
+}
+
+/**
+  * @brief I2C3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C3_Init(void)
+{
+
+  /* USER CODE BEGIN I2C3_Init 0 */
+
+  /* USER CODE END I2C3_Init 0 */
+
+  /* USER CODE BEGIN I2C3_Init 1 */
+
+  /* USER CODE END I2C3_Init 1 */
+  hi2c3.Instance = I2C3;
+  hi2c3.Init.Timing = 0x00F07BFF;
+  hi2c3.Init.OwnAddress1 = 0;
+  hi2c3.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c3.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c3.Init.OwnAddress2 = 0;
+  hi2c3.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c3.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c3.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c3, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c3, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C3_Init 2 */
+
+  /* USER CODE END I2C3_Init 2 */
+
+}
+
+/**
+  * @brief I2C4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C4_Init(void)
+{
+
+  /* USER CODE BEGIN I2C4_Init 0 */
+
+  /* USER CODE END I2C4_Init 0 */
+
+  /* USER CODE BEGIN I2C4_Init 1 */
+
+  /* USER CODE END I2C4_Init 1 */
+  hi2c4.Instance = I2C4;
+  hi2c4.Init.Timing = 0x00F07BFF;
+  hi2c4.Init.OwnAddress1 = 0;
+  hi2c4.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c4.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c4.Init.OwnAddress2 = 0;
+  hi2c4.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c4.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c4.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c4, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c4, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C4_Init 2 */
+
+  /* USER CODE END I2C4_Init 2 */
 
 }
 
@@ -365,6 +623,54 @@ static void MX_USART2_UART_Init(void)
 }
 
 /**
+  * @brief USART3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART3_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART3_Init 0 */
+
+  /* USER CODE END USART3_Init 0 */
+
+  /* USER CODE BEGIN USART3_Init 1 */
+
+  /* USER CODE END USART3_Init 1 */
+  huart3.Instance = USART3;
+  huart3.Init.BaudRate = 115200;
+  huart3.Init.WordLength = UART_WORDLENGTH_8B;
+  huart3.Init.StopBits = UART_STOPBITS_1;
+  huart3.Init.Parity = UART_PARITY_NONE;
+  huart3.Init.Mode = UART_MODE_TX_RX;
+  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart3.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart3.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart3.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetTxFifoThreshold(&huart3, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetRxFifoThreshold(&huart3, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_DisableFifoMode(&huart3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART3_Init 2 */
+
+  /* USER CODE END USART3_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -384,30 +690,20 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOG, GPIO_PIN_2, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : PG2 */
-  GPIO_InitStruct.Pin = GPIO_PIN_2;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PC7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  /*Configure GPIO pin : PC3 */
+  GPIO_InitStruct.Pin = GPIO_PIN_3;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PB7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  /*Configure GPIO pin : PB6 */
+  GPIO_InitStruct.Pin = GPIO_PIN_6;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -440,6 +736,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
+
+
 
   /* USER CODE END Callback 1 */
 }

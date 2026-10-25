@@ -1,0 +1,333 @@
+//#include "motion_analysis.h"
+//#include "bmi270.h"                 // <-- NEU: statt lsm6dsox.h
+//#include "angle.h"
+//#include "uart_comm.h"
+//#include "stm32u5xx_nucleo.h"
+//#include "complementary_filter.h"
+//#include <math.h>
+//#include <stdbool.h>
+//#include <stdio.h>
+//
+//#define GYRO_SENS_DPS_PER_LSB   0.1f    // ggf. an BMI270-Range anpassen
+//#define SLOW_ANGLE_THRES_DEG    5.0f
+//#define FAST_GYRO_THRES_DPS     300.0f
+//#define GYRO_DEADBAND_DPS       4.0f
+//#define LED_BLINK_MS            100
+//
+//typedef enum { IDLE, SLOW_UP, SLOW_DOWN, FAST_UP, FAST_DOWN } MotionState;
+//
+//static MotionState state       = IDLE;
+//static uint32_t    lastBlink   = 0;
+//static bool        initialized = false;
+//static uint32_t    lastTs      = 0;
+//
+//
+//static HAL_StatusTypeDef BMI270_ReadAccGyro(I2C_HandleTypeDef *hi2c,
+//                                              int16_t *ax,int16_t *ay,int16_t *az,
+//                                              int16_t *gx,int16_t *gy,int16_t *gz)
+//{
+//    uint8_t d[12];
+//    HAL_StatusTypeDef s = HAL_I2C_Mem_Read(hi2c, BMI270_I2C_ADDR,
+//                                           BMI270_REG_DATA_8, I2C_MEMADD_SIZE_8BIT,
+//                                           d, sizeof d, 10 /*ms Timeout*/);
+//    if (s != HAL_OK) return s;
+//
+//    *ax = (int16_t)((d[1]  << 8) | d[0]);
+//    *ay = (int16_t)((d[3]  << 8) | d[2]);
+//    *az = (int16_t)((d[5]  << 8) | d[4]);
+//    *gx = (int16_t)((d[7]  << 8) | d[6]);
+//    *gy = (int16_t)((d[9]  << 8) | d[8]);
+//    *gz = (int16_t)((d[11] << 8) | d[10]);
+//    return HAL_OK;
+//}
+//
+//
+//void Motion_Process_270(I2C_HandleTypeDef *hi2c,
+//                             float basePitch,
+//                             float gyroBias,
+//                             uint32_t ts)
+//{
+//    int16_t ax_i16, ay_i16, az_i16;
+//    int16_t gx_i16, gy_i16, gz_i16;
+//
+//    if (BMI270_ReadAccGyro(hi2c, &ax_i16, &ay_i16, &az_i16, &gx_i16, &gy_i16, &gz_i16) != HAL_OK) return;
+//
+////    printf("ACC:%d,%d,%d  GYR:%d,%d,%d\r\n",
+////           ax_i16, ay_i16, az_i16,
+////           gx_i16, gy_i16, gz_i16);
+//
+//    float pitchAccel = Calculate_Pitch(ax_i16, ay_i16, az_i16);
+//    float gyroY_dps  = ((float)gy_i16) * GYRO_SENS_DPS_PER_LSB;
+//
+//    gyroY_dps -= gyroBias;
+//    if (fabsf(gyroY_dps) < GYRO_DEADBAND_DPS) {
+//        gyroY_dps = 0.0f;
+//    }
+//
+//    if (!initialized) {
+//        ComplementaryFilter_Init(pitchAccel);
+//        lastTs      = ts;
+//        initialized = true;
+//    }
+//    float dt = (ts - lastTs) * 1e-3f;
+//    if (dt < 0) dt = 0;          // Schutz gegen Zeit-Rollover
+//    lastTs = ts;
+//
+//    float fusedPitch = ComplementaryFilter_Update(pitchAccel, gyroY_dps, dt);
+//
+//    float delta = fusedPitch - basePitch;
+//    bool  fast  = fabsf(gyroY_dps) >= FAST_GYRO_THRES_DPS;
+//    bool  slow  = fabsf(delta)     >= SLOW_ANGLE_THRES_DEG;
+//    MotionState newState = IDLE;
+//
+//    if (fast)      newState = (delta > 0) ? FAST_UP   : FAST_DOWN;
+//    else if (slow) newState = (delta > 0) ? SLOW_UP   : SLOW_DOWN;
+//
+//    if (newState != state) {
+//        BSP_LED_Off(LED_GREEN);
+//        BSP_LED_Off(LED_RED);
+//        lastBlink = ts;
+//        state     = newState;
+//    }
+//
+//    switch (state) {
+//        case SLOW_UP:   BSP_LED_On(LED_GREEN); break;
+//        case SLOW_DOWN: BSP_LED_On(LED_RED);   break;
+//        case FAST_UP:
+//            if (ts - lastBlink >= LED_BLINK_MS) {
+//                BSP_LED_Toggle(LED_GREEN);
+//                lastBlink = ts;
+//            }
+//            break;
+//        case FAST_DOWN:
+//            if (ts - lastBlink >= LED_BLINK_MS) {
+//                BSP_LED_Toggle(LED_RED);
+//                lastBlink = ts;
+//            }
+//            break;
+//        default: break;
+//    }
+//
+//     printf("FusedPitch=%.1f°, Δ=%.1f°, GyroY=%.1f°/s, State=%d\n", fusedPitch, delta, gyroY_dps, state);
+//
+//    // SendToPython(fusedPitch, delta, gyroY_dps);
+//}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#include "motion_analysis.h"
+#include "bmi270.h"
+#include "bmi2.h"
+#include "angle.h"
+#include "uart_comm.h"
+#include "stm32u5xx_nucleo.h"
+#include "complementary_filter.h"
+#include <math.h>
+#include <stdbool.h>
+#include <stdio.h>
+
+#define GYRO_SENS_DPS_PER_LSB   0.061f
+#define SLOW_ANGLE_THRES_DEG    5.0f
+#define FAST_GYRO_THRES_DPS     300.0f
+#define GYRO_DEADBAND_DPS       4.0f
+#define LED_BLINK_MS            100
+
+typedef enum { IDLE, SLOW_UP, SLOW_DOWN, FAST_UP, FAST_DOWN } MotionState;
+static MotionState state = IDLE;
+static uint32_t lastBlink = 0;
+static bool initialized = false;
+static uint32_t lastTs = 0;
+
+/* --- NEU: Ein FIFO-Verarbeiter, der viele Frames am Stück abholt --- */
+void Motion_Process_270(I2C_HandleTypeDef *hi2c, float basePitch, float gyroBias, uint32_t ts)
+{
+    (void)hi2c; // nicht mehr direkt benutzt; wir gehen über die Bosch-API
+    struct bmi2_dev *dev = BMI270_GetDev();
+    if (!dev) return;
+
+    /* 1) FIFO-Frame vorbereiten + Buffer */
+    static uint8_t fifo_buf[512];
+    static struct bmi2_fifo_frame fifo = {0};   // persist indices across calls
+
+    // Mirror the FIFO *sensor* configuration into the *parser* flags, every call:
+    fifo.data                = fifo_buf;
+    fifo.length              = 0;                // will set below
+    fifo.header_enable       = BMI2_ENABLE;      // we enabled HEADER in init
+    fifo.data_enable         = (uint16_t)(BMI2_FIFO_ACC_EN | BMI2_FIFO_GYR_EN);
+
+    // Always reset byte start indices before a new read
+    fifo.acc_byte_start_idx  = 0;
+    fifo.gyr_byte_start_idx  = 0;
+    fifo.aux_byte_start_idx  = 0;
+
+    // 1) Ask device for available FIFO bytes
+    uint16_t fifo_len_dev = 0;
+    if (bmi2_get_fifo_length(&fifo_len_dev, dev) != BMI2_OK) return;
+
+    // Sanity-guard: clamp to buffer and to physical FIFO
+    if (fifo_len_dev > sizeof(fifo_buf)) {
+        // absurd length -> flush once and bail this cycle
+        (void)bmi2_set_command_register(BMI2_FIFO_FLUSH_CMD, dev);
+        printf("FIFO length absurd (%u) -> flushed\n", fifo_len_dev);
+        return;
+    }
+
+    // Also ignore tiny reads (no full frame yet)
+    if (fifo_len_dev < 16) return;
+
+    // 2) Read exactly that many bytes
+    fifo.length = fifo_len_dev;
+    if (bmi2_read_fifo_data(&fifo, dev) != BMI2_OK) return;
+
+    uint16_t parsed_acc = 0, parsed_gyr = 0;
+
+    struct bmi2_sens_axes_data acc_m[32], gyr_m[32];
+    uint16_t acc_m_len = 0, gyr_m_len = 0;
+
+    uint16_t i = 0;
+    while (i + 1 <= fifo.length) {
+        uint8_t h = fifo_buf[i];
+
+        if (h == 0x8C) { // ACC + GYR combined
+            if (i + 13 > fifo.length) break; // unvollständig
+            // Acc (LE)
+            int16_t ax = (int16_t)((uint16_t)fifo_buf[i+2]  << 8 | fifo_buf[i+1]);
+            int16_t ay = (int16_t)((uint16_t)fifo_buf[i+4]  << 8 | fifo_buf[i+3]);
+            int16_t az = (int16_t)((uint16_t)fifo_buf[i+6]  << 8 | fifo_buf[i+5]);
+            // Gyro (LE)
+            int16_t gx = (int16_t)((uint16_t)fifo_buf[i+8]  << 8 | fifo_buf[i+7]);
+            int16_t gy = (int16_t)((uint16_t)fifo_buf[i+10] << 8 | fifo_buf[i+9]);
+            int16_t gz = (int16_t)((uint16_t)fifo_buf[i+12] << 8 | fifo_buf[i+11]);
+
+            if (acc_m_len < 32) { acc_m[acc_m_len].x = ax; acc_m[acc_m_len].y = ay; acc_m[acc_m_len].z = az; acc_m_len++; }
+            if (gyr_m_len < 32) { gyr_m[gyr_m_len].x = gx; gyr_m[gyr_m_len].y = gy; gyr_m[gyr_m_len].z = gz; gyr_m_len++; }
+            i += 13;
+            continue;
+        }
+        // (Optional) Weitere Header-Typen behandeln:
+        // 0x84 = nur ACC (1+6=7 Bytes), 0x88 = nur GYR (1+6=7 Bytes)
+        if (h == 0x84 || h == 0x88) {
+            if (i + 7 > fifo.length) break;
+            if (h == 0x84 && acc_m_len < 32) {
+                int16_t ax = (int16_t)((uint16_t)fifo_buf[i+2] << 8 | fifo_buf[i+1]);
+                int16_t ay = (int16_t)((uint16_t)fifo_buf[i+4] << 8 | fifo_buf[i+3]);
+                int16_t az = (int16_t)((uint16_t)fifo_buf[i+6] << 8 | fifo_buf[i+5]);
+                acc_m[acc_m_len++] = (struct bmi2_sens_axes_data){ax,ay,az};
+            } else if (h == 0x88 && gyr_m_len < 32) {
+                int16_t gx = (int16_t)((uint16_t)fifo_buf[i+2] << 8 | fifo_buf[i+1]);
+                int16_t gy = (int16_t)((uint16_t)fifo_buf[i+4] << 8 | fifo_buf[i+3]);
+                int16_t gz = (int16_t)((uint16_t)fifo_buf[i+6] << 8 | fifo_buf[i+5]);
+                gyr_m[gyr_m_len++] = (struct bmi2_sens_axes_data){gx,gy,gz};
+            }
+            i += 7;
+            continue;
+        }
+
+        // Unbekannter Header: 1 Byte überspringen (oder robust: suche nächstes 0x8C)
+        i += 1;
+    }
+
+    // Wenn Bosch-Extractor nichts lieferte, nimm die manuell geparsten Daten:
+    uint16_t acc_len = acc_m_len, gyr_len = gyr_m_len;
+
+    // 3) Extract frames
+    struct bmi2_sens_axes_data acc[32], gyr[32];
+    uint16_t acc_len = 32,  gyr_len = 32;
+    if (bmi2_extract_accel(acc, &acc_len, &fifo, dev) != BMI2_OK) acc_len = 0;
+    if (bmi2_extract_gyro (gyr, &gyr_len, &fifo, dev) != BMI2_OK) gyr_len = 0;
+
+    printf("acc_len=%u gyr_len=%u\n", acc_len, gyr_len);
+    /* Parser kommen aus deiner Bosch-Lib.  */
+
+    /* 4) Für jedes Sample fusionieren (so wenig printf wie möglich!) */
+    uint16_t n = (acc_len < gyr_len) ? acc_len : gyr_len;
+    for (uint16_t i = 0; i < n; i++) {
+        int16_t ax_i16 = acc[i].x;
+        int16_t ay_i16 = acc[i].y;
+        int16_t az_i16 = acc[i].z;
+        int16_t gx_i16 = gyr[i].x;
+        int16_t gy_i16 = gyr[i].y;
+        int16_t gz_i16 = gyr[i].z;
+
+        float pitchAccel = Calculate_Pitch(ax_i16, ay_i16, az_i16);
+        float gyroY_dps  = ((float)gy_i16) * GYRO_SENS_DPS_PER_LSB;
+
+        gyroY_dps -= gyroBias;
+        if (fabsf(gyroY_dps) < GYRO_DEADBAND_DPS) gyroY_dps = 0.0f;
+
+        if (!initialized) {
+            ComplementaryFilter_Init(pitchAccel);
+            lastTs      = ts;
+            initialized = true;
+        }
+
+        float dt = (ts - lastTs) * 1e-3f;
+        if (dt < 0) dt = 0;  // Schutz bei Rollover
+        lastTs = ts;
+
+        float fusedPitch = ComplementaryFilter_Update(pitchAccel, gyroY_dps, dt);
+
+        float delta = fusedPitch - basePitch;
+        bool  fast  = fabsf(gyroY_dps) >= FAST_GYRO_THRES_DPS;
+        bool  slow  = fabsf(delta)     >= SLOW_ANGLE_THRES_DEG;
+        MotionState newState = IDLE;
+
+        if (fast)      newState = (delta > 0) ? FAST_UP   : FAST_DOWN;
+        else if (slow) newState = (delta > 0) ? SLOW_UP   : SLOW_DOWN;
+
+        if (newState != state) {
+            BSP_LED_Off(LED_GREEN);
+            BSP_LED_Off(LED_RED);
+            lastBlink = ts;
+            state     = newState;
+        }
+
+        switch (state) {
+            case SLOW_UP:   BSP_LED_On(LED_GREEN); break;
+            case SLOW_DOWN: BSP_LED_On(LED_RED);   break;
+            case FAST_UP:
+                if (ts - lastBlink >= LED_BLINK_MS) { BSP_LED_Toggle(LED_GREEN); lastBlink = ts; }
+                break;
+            case FAST_DOWN:
+                if (ts - lastBlink >= LED_BLINK_MS) { BSP_LED_Toggle(LED_RED);   lastBlink = ts; }
+                break;
+            default: break;
+        }
+
+        // Debug nur selten:
+        // static uint32_t dbg = 0; if ((dbg++ % 50u) == 0u)
+            printf("Pitch=%.1f Δ=%.1f GyY=%.1f n=%u\r\n", fusedPitch, delta, gyroY_dps, n);
+    }
+}
+

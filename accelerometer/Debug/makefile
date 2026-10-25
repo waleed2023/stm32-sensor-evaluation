@@ -61,8 +61,8 @@ all: main-build
 main-build: accelerometer.elf secondary-outputs
 
 # Tool invocations
-accelerometer.elf accelerometer.map: $(OBJS) $(USER_OBJS) C:\localcheckouts\accelerometer\accelerometer\STM32U575ZITXQ_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "accelerometer.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m33 -T"C:\localcheckouts\accelerometer\accelerometer\STM32U575ZITXQ_FLASH.ld" --specs=nosys.specs -Wl,-Map="accelerometer.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+accelerometer.elf accelerometer.map: $(OBJS) $(USER_OBJS) C:\localcheckouts\BA\accelerometer\accelerometer\STM32U575ZITXQ_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "accelerometer.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m33 -T"C:\localcheckouts\BA\accelerometer\accelerometer\STM32U575ZITXQ_FLASH.ld" --specs=nosys.specs -Wl,-Map="accelerometer.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

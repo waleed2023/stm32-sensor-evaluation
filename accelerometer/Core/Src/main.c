@@ -50,6 +50,7 @@
 COM_InitTypeDef BspCOMInit;
 
 I2C_HandleTypeDef hi2c2;
+I2C_HandleTypeDef hi2c3;
 
 UART_HandleTypeDef huart2;
 
@@ -65,6 +66,7 @@ static void MX_GPIO_Init(void);
 static void MX_ICACHE_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_I2C3_Init(void);
 /* USER CODE BEGIN PFP */
 #define DEMCR *((volatile uint32_t*) 0xE000EDFCu)
 #define ITM_TCR     (*(volatile uint32_t*)0xE0000E80)
@@ -137,6 +139,7 @@ int main(void)
   MX_ICACHE_Init();
   MX_I2C2_Init();
   MX_USART2_UART_Init();
+  MX_I2C3_Init();
   /* USER CODE BEGIN 2 */
 
 
@@ -155,7 +158,7 @@ int main(void)
   HAL_StatusTypeDef status;
   // --- Test 1: Sensor-ID lesen ---
   // Übergebe den I2C2-Handle an die Funktion
-  status = MIS2DH_ReadID(&hi2c2, &sensor_id);
+  status = MIS2DH_ReadID(&hi2c3, &sensor_id);
   if (status == HAL_OK) {
       if (sensor_id == MIS2DH_WHO_AM_I_VALUE) {
           // Kommunikation erfolgreich, Sensor gefunden!
@@ -177,7 +180,7 @@ int main(void)
 
   // --- Sensor initialisieren (z.B. Data Rate, Achsen aktivieren) ---
   // Übergebe den I2C2-Handle
-  status = MIS2DH_Init(&hi2c2);
+  status = MIS2DH_Init(&hi2c3);
   if (status == HAL_OK) {
        printf("Sensor initialisiert.\r\n");
   } else {
@@ -216,7 +219,7 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	    // --- Test 2: Beschleunigungsdaten lesen ---
 	    // Übergebe den I2C2-Handle
-	    status = MIS2DH_ReadXYZ(&hi2c2, &accel_x, &accel_y, &accel_z);
+	    status = MIS2DH_ReadXYZ(&hi2c3, &accel_x, &accel_y, &accel_z);
 	    if (status == HAL_OK) {
 	        // Daten erfolgreich gelesen
 	        // Diese Werte (accel_x, accel_y, accel_z) kannst du nun im Debugger
@@ -287,6 +290,7 @@ void SystemClock_Config(void)
   */
 static void SystemPower_Config(void)
 {
+  HAL_PWREx_EnableVddIO2();
 
   /*
    * Disable the internal Pull-Up in Dead Battery pins of UCPD peripheral
@@ -349,6 +353,54 @@ static void MX_I2C2_Init(void)
   /* USER CODE BEGIN I2C2_Init 2 */
 
   /* USER CODE END I2C2_Init 2 */
+
+}
+
+/**
+  * @brief I2C3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C3_Init(void)
+{
+
+  /* USER CODE BEGIN I2C3_Init 0 */
+
+  /* USER CODE END I2C3_Init 0 */
+
+  /* USER CODE BEGIN I2C3_Init 1 */
+
+  /* USER CODE END I2C3_Init 1 */
+  hi2c3.Instance = I2C3;
+  hi2c3.Init.Timing = 0x00000E14;
+  hi2c3.Init.OwnAddress1 = 0;
+  hi2c3.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c3.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c3.Init.OwnAddress2 = 0;
+  hi2c3.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c3.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c3.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c3, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c3, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C3_Init 2 */
+
+  /* USER CODE END I2C3_Init 2 */
 
 }
 
@@ -447,6 +499,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOG_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */

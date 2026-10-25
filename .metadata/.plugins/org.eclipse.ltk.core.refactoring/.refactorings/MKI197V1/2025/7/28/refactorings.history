@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename resource &apos;MKI197V1/Core/Src/sdfsd.c&apos; to &apos;uart_comm.c&apos;" description="Rename resource &apos;sdfsd.c&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="Core/Src/sdfsd.c" name="uart_comm.c" stamp="1752216188424" updateReferences="true"/>
+</session>

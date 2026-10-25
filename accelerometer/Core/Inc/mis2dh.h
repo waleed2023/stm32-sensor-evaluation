@@ -4,7 +4,7 @@
 #include "main.h" // Notwendig für HAL-Typen
 
 // MIS2DH I2C Slave Adresse (7-bit Adresse ist 0x18 wenn SA0 pin low ist)
-#define MIS2DH_I2C_ADDR_7BIT    0x18
+#define MIS2DH_I2C_ADDR_7BIT    0x19
 
 // 8-bit Adressen für HAL-Funktionen (inkl. R/W-Bit im höchstwertigen Bit)
 #define MIS2DH_I2C_ADDR_8BIT_W  (MIS2DH_I2C_ADDR_7BIT << 1)       // 0x30 für Schreiben
